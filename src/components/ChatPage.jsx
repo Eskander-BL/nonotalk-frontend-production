@@ -221,12 +221,16 @@ export default function ChatPage() {
 
   const loadConversations = async () => {
     try {
+      console.log("[History] Fetching history...");
+      console.log("[History] Cookies included:", document.cookie);
       const response = await fetch(`${API_URL}/chat/conversations`, {
         credentials: 'include'
       })
+      console.log("[History] Response:", response);
       
       if (response.ok) {
         const data = await response.json()
+        console.log("[History] Data:", data);
         setConversations(data.conversations)
         // Mettre en cache local les 10 dernières conversations
         try {
@@ -306,12 +310,16 @@ export default function ChatPage() {
     }
     
     try {
+      console.log("[History] Fetching messages for conversation:", conversation.id);
+      console.log("[History] Cookies included:", document.cookie);
       const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, {
         credentials: 'include'
       })
+      console.log("[History] Response:", response);
       
       if (response.ok) {
         const data = await response.json()
+        console.log("[History] Data:", data);
         setMessages(data.messages)
         // Mettre en cache local les 10 derniers messages
         try {
@@ -558,35 +566,35 @@ export default function ChatPage() {
       }
       
       // Démarrer l'enregistrement avec callback pour traiter le transcript
-      console.log('[ChatPage] Appel startRecording avec callback')
+      console.log('[Voice] Recording started')
       await startRecording(async (transcript) => {
         try {
-          console.log('[ChatPage] Transcript reçu:', transcript, 'type=', typeof transcript, 'len=', (transcript || '').length)
+          console.log('[Voice] Transcript received:', transcript, 'type=', typeof transcript, 'len=', (transcript || '').length)
           const cleanTranscript = typeof transcript === 'string' ? transcript.trim() : ''
           if (cleanTranscript === lastTranscriptRef.current) {
-            console.warn('[ChatPage] Transcript dupliqué (callback), envoi annulé')
+            console.warn('[Voice] Duplicate transcript, ignoring')
             return
           }
           lastTranscriptRef.current = cleanTranscript
 
           if (cleanTranscript) {
             // Envoyer automatiquement le message transcrit
-            console.log('[ChatPage] Envoi transcript au backend via sendMessage...')
+            console.log('[Voice] Sending transcript to backend...')
             let targetConvId = convId ?? currentConversation?.id
             if (!targetConvId) {
               const conv = await createMainConversation()
               targetConvId = conv?.id
             }
             if (!targetConvId) {
-              console.error('[ChatPage] Impossible de déterminer une conversation id')
+              console.error('[Voice] No conversation id found')
               return
             }
             await sendMessageStream(cleanTranscript, null, targetConvId)
           } else {
-            console.warn('[ChatPage] Transcript vide/falsy, envoi annulé')
+            console.warn('[Voice] Empty transcript, ignoring')
           }
         } catch (err) {
-          console.error('[ChatPage] Erreur dans le callback startRecording:', err)
+          console.error('[Voice] Error in startRecording callback:', err)
         }
       })
     }
@@ -800,7 +808,7 @@ export default function ChatPage() {
 
 
         {/* Interface principale - Avatar fixe au centre sans scrollbar */}
-        <div ref={avatarContainerRef} className="flex-1 flex flex-col items-center justify-start p-4 pt-6 overflow-hidden pb-24 md:pb-0 md:justify-center md:pt-0">
+        <div ref={avatarContainerRef} className="avatar-container-fix flex-1 flex flex-col items-center justify-start p-4 pt-6 overflow-hidden pb-24 md:pb-0 md:justify-center md:pt-0">
           <div className={`w-[178px] h-[178px] md:w-[210px] md:h-[210px] rounded-full bg-gradient-to-br from-purple-400 to-blue-400 flex items-center justify-center shadow-lg transition-all duration-300 ${
             isPlaying ? 'talking' : ''
           }`}>
