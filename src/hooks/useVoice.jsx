@@ -145,9 +145,10 @@ export function useVoice() {
       })
       // Choisir un mimeType compatible (Safari iOS supporte parfois audio/mp4, Chrome audio/webm;codecs=opus)
       const preferredTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4'
+        'audio/wav',              // Safari iOS supporte WAV
+        'audio/webm;codecs=opus', // Chrome desktop
+        'audio/webm',             // Fallback webm
+        'audio/mp4'               // Fallback mp4
       ]
       let chosenType = ''
       if (typeof window !== 'undefined' && window.MediaRecorder && typeof MediaRecorder.isTypeSupported === 'function') {
@@ -214,7 +215,7 @@ export function useVoice() {
           window.dispatchEvent(new CustomEvent('voice:speech_end'))
         } catch {}
 
-        const currentType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || 'audio/webm'
+        const currentType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || 'audio/wav'
         const audioBlob = new Blob(audioChunksRef.current, { type: currentType })
         console.log('[useVoice] audioBlob size=', audioBlob.size)
         const transcript = await transcribeAudio(audioBlob)
