@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { API_URL } from '../lib/api'
+import { API_URL, getAuthFetchOptions } from '../lib/api'
 
 export function useVoice() {
   const [isRecording, setIsRecording] = useState(false)
@@ -300,11 +300,14 @@ export function useVoice() {
       formData.append('audio', audioBlob, `recording.${ext}`)
 
       console.log('[useVoice] POST /api/speech-to-text ...')
-      const response = await fetch(`${API_URL}/speech-to-text`, {
+      // Pour FormData, ne pas inclure Content-Type (auto-détecté)
+      const authOptions = getAuthFetchOptions({
         method: 'POST',
-        credentials: 'include',
-        body: formData,
+        body: formData
       })
+      delete authOptions.headers['Content-Type']  // Laisser le navigateur définir le boundary
+      
+      const response = await fetch(`${API_URL}/speech-to-text`, authOptions)
 
       if (response.ok) {
         const data = await response.json()

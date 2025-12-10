@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import './ChatPage.css'
 import { useIsMobile } from '../hooks/use-mobile'
-import { API_URL } from '../lib/api'
+import { API_URL, getAuthFetchOptions } from '../lib/api'
 
 export default function ChatPage() {
   const { user, logout, updateUser } = useAuth()
@@ -66,14 +66,10 @@ export default function ChatPage() {
   // Fonction pour jouer l'audio avec ElevenLabs
   const playElevenLabsAudio = async (text) => {
     try {
-      const response = await fetch(`${API_URL}/tts/elevenlabs`, {
+      const response = await fetch(`${API_URL}/tts/elevenlabs`, getAuthFetchOptions({
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ text })
-      })
+      }))
       
       if (response.ok) {
         const audioBlob = await response.blob()
@@ -204,9 +200,7 @@ export default function ChatPage() {
 
   const checkQuota = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/check-quota`, {
-        credentials: 'include'
-      })
+      const response = await fetch(`${API_URL}/auth/check-quota`, getAuthFetchOptions())
       
       if (response.ok) {
         const data = await response.json()
@@ -221,9 +215,7 @@ export default function ChatPage() {
 
   const loadConversations = async () => {
     try {
-      const response = await fetch(`${API_URL}/chat/conversations`, {
-        credentials: 'include'
-      })
+      const response = await fetch(`${API_URL}/chat/conversations`, getAuthFetchOptions())
       
       if (response.ok) {
         const data = await response.json()
@@ -267,14 +259,10 @@ export default function ChatPage() {
 
   const createMainConversation = async () => {
     try {
-      const response = await fetch(`${API_URL}/chat/conversations`, {
+      const response = await fetch(`${API_URL}/chat/conversations`, getAuthFetchOptions({
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ title: 'Conversation avec Nono' }),
-      })
+        body: JSON.stringify({ title: 'Conversation avec Nono' })
+      }))
       
       if (response.ok) {
         const data = await response.json()
@@ -306,9 +294,7 @@ export default function ChatPage() {
     }
     
     try {
-      const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, {
-        credentials: 'include'
-      })
+      const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, getAuthFetchOptions())
       
       if (response.ok) {
         const data = await response.json()
@@ -338,17 +324,13 @@ export default function ChatPage() {
 
     try {
       console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
-      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, {
+      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
         body: JSON.stringify({ 
           message: messageContent,
           emotion: emotion 
-        }),
-      })
+        })
+      }))
 
       const data = await response.json()
 
@@ -613,11 +595,14 @@ export default function ChatPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_URL}/chat/conversations/${convId}/upload-image`, {
+      // Pour FormData, ne pas inclure Content-Type (auto-détecté)
+      const authOptions = getAuthFetchOptions({
         method: 'POST',
-        credentials: 'include',
-        body: formData,
+        body: formData
       })
+      delete authOptions.headers['Content-Type']  // Laisser le navigateur définir le boundary
+      
+      const response = await fetch(`${API_URL}/chat/conversations/${convId}/upload-image`, authOptions)
 
       const data = await response.json()
 
@@ -647,10 +632,9 @@ export default function ChatPage() {
 
   const acknowledgeCrisis = async () => {
     try {
-      await fetch(`${API_URL}/chat/crisis/acknowledge`, {
-        method: 'POST',
-        credentials: 'include'
-      })
+      await fetch(`${API_URL}/chat/crisis/acknowledge`, getAuthFetchOptions({
+        method: 'POST'
+      }))
       setCrisisAlert(null)
     } catch (error) {
       console.error('Erreur lors de l\'acknowledgement de crise:', error)
@@ -671,12 +655,10 @@ export default function ChatPage() {
     setInviteError('')
     setInviteSuccess('')
     try {
-      const res = await fetch(`${API_URL}/invite`, {
+      const res = await fetch(`${API_URL}/invite`, getAuthFetchOptions({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ email: inviteEmail, invited_by: user?.username })
-      })
+      }))
       const data = await res.json()
       if (res.ok) {
         setInviteSuccess("🎉 Invitation envoyée ! Tu recevras +5 échanges dès que ton ami créera un compte.")
