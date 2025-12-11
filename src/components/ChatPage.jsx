@@ -18,7 +18,6 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useVoice } from '../hooks/useVoice'
-import { LogViewer } from './LogViewer'
 import aiAvatarImage from '../assets/ai-avatar.png'
 import nonoVideo from '../assets/NonoVideo.mp4'
 import { useNavigate } from 'react-router-dom'
@@ -959,9 +958,6 @@ export default function ChatPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Log Viewer pour déboguer sur mobile */}
-      <LogViewer />
     </div>
   )
 }
