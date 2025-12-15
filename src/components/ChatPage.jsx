@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useVoice } from '../hooks/useVoice'
+import { LogViewer } from './LogViewer'
 import aiAvatarImage from '../assets/ai-avatar.png'
 import nonoVideo from '../assets/NonoVideo.mp4'
 import { useNavigate } from 'react-router-dom'
@@ -382,17 +383,14 @@ export default function ChatPage() {
     try {
       const streamUrl = `${API_URL}/chat/conversations/${convId}/send-stream`
 
-      const res = await fetch(streamUrl, {
+      const res = await fetch(streamUrl, getAuthFetchOptions({
         method: 'POST',
         mode: 'cors',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          'Cache-Control': 'no-cache'
-        },
-        credentials: 'include',
         body: JSON.stringify({ message: messageContent, emotion })
-      })
+      }))
+      // Ajouter les headers spécifiques au streaming
+      res.headers.set('Accept', 'text/event-stream')
+      res.headers.set('Cache-Control', 'no-cache')
 
       if (!res.ok || !res.body) {
         console.warn('[ChatPage] Streaming non dispo, fallback sendMessage')
@@ -539,38 +537,10 @@ export default function ChatPage() {
         convId = conv?.id
       }
       
-      // Démarrer l'enregistrement avec callback pour traiter le transcript
-      console.log('[ChatPage] Appel startRecording avec callback')
-      await startRecording(async (transcript) => {
-        try {
-          console.log('[ChatPage] Transcript reçu:', transcript, 'type=', typeof transcript, 'len=', (transcript || '').length)
-          const cleanTranscript = typeof transcript === 'string' ? transcript.trim() : ''
-          if (cleanTranscript === lastTranscriptRef.current) {
-            console.warn('[ChatPage] Transcript dupliqué (callback), envoi annulé')
-            return
-          }
-          lastTranscriptRef.current = cleanTranscript
-
-          if (cleanTranscript) {
-            // Envoyer automatiquement le message transcrit
-            console.log('[ChatPage] Envoi transcript au backend via sendMessage...')
-            let targetConvId = convId ?? currentConversation?.id
-            if (!targetConvId) {
-              const conv = await createMainConversation()
-              targetConvId = conv?.id
-            }
-            if (!targetConvId) {
-              console.error('[ChatPage] Impossible de déterminer une conversation id')
-              return
-            }
-            await sendMessageStream(cleanTranscript, null, targetConvId)
-          } else {
-            console.warn('[ChatPage] Transcript vide/falsy, envoi annulé')
-          }
-        } catch (err) {
-          console.error('[ChatPage] Erreur dans le callback startRecording:', err)
-        }
-      })
+      // Démarrer l'enregistrement
+      // Le transcript sera traité par l'event listener 'voice:transcription' ci-dessus
+      console.log('[ChatPage] Appel startRecording')
+      await startRecording()
     }
   }
 
@@ -958,6 +928,9 @@ export default function ChatPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Log Viewer pour déboguer sur mobile */}
+      <LogViewer />
     </div>
   )
 }
