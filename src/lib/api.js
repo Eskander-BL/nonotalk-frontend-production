@@ -32,7 +32,6 @@ export function getAuthFetchOptions(options = {}) {
     ...options,
     credentials: 'include',  // Garder pour compatibilité desktop
     headers: {
-      'Content-Type': 'application/json',  // Correction erreur 415
       ...options.headers
     }
   };
