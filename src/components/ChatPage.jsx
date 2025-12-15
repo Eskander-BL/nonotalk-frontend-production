@@ -382,17 +382,15 @@ export default function ChatPage() {
     try {
       const streamUrl = `${API_URL}/chat/conversations/${convId}/send-stream`
 
-      const res = await fetch(streamUrl, {
+      const res = await fetch(streamUrl, getAuthFetchOptions({
         method: 'POST',
         mode: 'cors',
-        headers: { 
-          'Content-Type': 'application/json',
+        headers: {
           'Accept': 'text/event-stream',
           'Cache-Control': 'no-cache'
         },
-        credentials: 'include',
         body: JSON.stringify({ message: messageContent, emotion })
-      })
+      }))
 
       if (!res.ok || !res.body) {
         console.warn('[ChatPage] Streaming non dispo, fallback sendMessage')
