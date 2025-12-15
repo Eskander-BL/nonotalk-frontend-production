@@ -17,6 +17,11 @@ self.addEventListener('install', event => {
 })
 
 self.addEventListener('fetch', event => {
+  // Ne pas intercepter les requêtes API
+  if (event.request.url.includes('/api/')) {
+    return
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {
