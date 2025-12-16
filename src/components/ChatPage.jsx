@@ -333,14 +333,19 @@ export default function ChatPage() {
       }))
 
       const data = await response.json()
+      console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
+      console.log('[ChatPage] AI message content:', data.ai_message?.content)
 
       if (response.ok) {
         if (data.crisis_detected) {
           setCrisisAlert(data.emergency_message)
         } else {
           // Ajouter les messages à la conversation + MAJ cache local
+          console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
           setMessages(prev => {
             const next = [...prev, data.user_message, data.ai_message]
+            console.log('[ChatPage] Messages after update:', next.length, 'total messages')
+            console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
             try {
               localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
             } catch (e) {
