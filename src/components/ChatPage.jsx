@@ -360,6 +360,14 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
+          // Déclencher la lecture audio si disponible
+          if (data.ai_message?.audio_path) {
+            console.log('[ChatPage] Playing audio:', data.ai_message.audio_path)
+            setTimeout(() => {
+              playAudio(data.ai_message.audio_path)
+            }, 500)  // Délai pour que le message s'affiche d'abord
+          }
+
           return data
         }
       } else if (response.status === 403) {
