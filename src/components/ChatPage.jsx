@@ -363,17 +363,11 @@ export default function ChatPage() {
           return data
         }
         
-        // IMPORTANT: Appel audio HORS de setMessages() pour garantir execution sur mobile
-        // Pas de condition desktop/mobile, pas de verification stream
-        // Si audio_path existe => appeler playAudio() immediatement
+        // Appel audio: si audio_path existe => appeler playAudio() immediatement
         if (data.ai_message?.audio_path) {
-          console.log('[ChatPage] AUDIO TRIGGER: audio_path trouve, appel playAudio()', data.ai_message.audio_path)
           setTimeout(() => {
-            console.log('[ChatPage] AUDIO EXEC: playAudio() executee')
             playAudio(data.ai_message.audio_path)
-          }, 300)  // Delai court pour que le message s'affiche
-        } else {
-          console.warn('[ChatPage] AUDIO SKIP: Pas d audio_path dans la reponse')
+          }, 300)
         }
       } else if (response.status === 403) {
         console.warn('[ChatPage] Quota épuisé (403)')
@@ -702,20 +696,6 @@ export default function ChatPage() {
               <Mic className="h-6 w-6 text-white" />
             )}
           </Button>
-          
-          {/* Bouton de test temporaire pour vérifier la lecture audio */}
-          <Button
-            onClick={() => {
-              console.log('[DEBUG] Test audio button clicked')
-              playAudio('/api/audio/test.mp3')
-            }}
-            variant="outline"
-            size="sm"
-            className="text-xs cursor-pointer"
-            title="Test audio (temporaire)"
-          >
-            🔊 Test
-          </Button>
 
           {isPlaying && (
               <Button
@@ -734,11 +714,6 @@ export default function ChatPage() {
             <p className="text-sm text-gray-600">🎤 Enregistrement en cours...</p>
           </div>
         )}
-        
-        {/* Debug info */}
-        <div className="text-center mt-2 text-xs text-gray-500">
-          <p>Device: {isMobile ? 'Mobile' : 'Desktop'}</p>
-        </div>
       </div>
 
       {/* Crisis Alert Dialog */}

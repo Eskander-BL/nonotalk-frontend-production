@@ -351,10 +351,7 @@ export function useVoice() {
 
   const playAudio = useCallback(async (audioUrl) => {
     try {
-      console.log('[useVoice] playAudio() appelée avec:', audioUrl, 'type:', typeof audioUrl)
-      
       // Vérifier si c'est une URL d'audio (fichier MP3 du backend)
-      // Accepter: /api/audio, https://.../api/audio, .mp3, .wav, etc.
       const isAudioUrl = audioUrl && (
         typeof audioUrl === 'string' && (
           audioUrl.includes('/api/audio') ||
@@ -365,10 +362,7 @@ export function useVoice() {
         )
       )
       
-      console.log('[useVoice] isAudioUrl:', isAudioUrl, 'audioUrl:', audioUrl)
-      
       if (isAudioUrl) {
-        console.log('[useVoice] Lecture audio MP3:', audioUrl)
         
         // Déverrouiller l'audio s'il ne l'est pas déjà
         if (!audioUnlocked) {
@@ -382,30 +376,18 @@ export function useVoice() {
         
         audio.onplay = () => {
           setIsPlaying(true)
-          console.log('[useVoice] Audio en lecture')
         }
         
         const handleDone = () => {
           setIsPlaying(false)
-          console.log('[useVoice] Audio terminé')
         }
         
         audio.onended = handleDone
-        audio.onerror = (e) => {
-          console.error('[useVoice] Erreur lecture audio:', e)
-          handleDone()
-        }
+        audio.onerror = handleDone
         
-        // Jouer l'audio
-        console.log("[AUDIO] Trying to play", audioUrl);
         const playPromise = audio.play()
         if (playPromise !== undefined) {
-          playPromise
-            .then(() => console.log("[AUDIO] play() SUCCESS"))
-            .catch((error) => {
-              console.error("[AUDIO] play() FAILED", error)
-              handleDone()
-            })
+          playPromise.catch(() => handleDone())
         }
         return
       }
