@@ -356,94 +356,44 @@ export function useVoice() {
 
   const playAudio = useCallback(async (audioUrl) => {
     try {
-      // Vérifier si c'est une URL d'audio (fichier MP3 du backend)
-      const isAudioUrl = audioUrl && (
-        typeof audioUrl === 'string' && (
-          audioUrl.includes('/api/audio') ||
-          audioUrl.endsWith('.mp3') ||
-          audioUrl.endsWith('.wav') ||
-          audioUrl.endsWith('.m4a') ||
-          audioUrl.startsWith('http') && (audioUrl.includes('audio') || audioUrl.includes('.mp3') || audioUrl.includes('.wav'))
-        )
-      )
-      
-      if (isAudioUrl) {
-        // Déverrouiller l'audio s'il ne l'est pas déjà
-        if (!audioUnlocked) {
-          unlockAudio()
-        }
+      // For AI responses, only play backend MP3 audio via HTMLAudioElement
+      // Disable SpeechSynthesisUtterance usage entirely for AI responses
 
-        // Utiliser un élément audio réutilisable
-        if (!audioElementRef.current) {
-          audioElementRef.current = new Audio()
-          audioElementRef.current.volume = 1.0
-        } else {
-          // Stopper la lecture en cours et nettoyer les événements
-          audioElementRef.current.pause()
-          audioElementRef.current.currentTime = 0
-          audioElementRef.current.onplay = null
-          audioElementRef.current.onended = null
-          audioElementRef.current.onerror = null
-        }
-
-        audioElementRef.current.src = audioUrl
-
-        audioElementRef.current.onplay = () => {
-          setIsPlaying(true)
-        }
-
-        const handleDone = () => {
-          setIsPlaying(false)
-        }
-
-        audioElementRef.current.onended = handleDone
-        audioElementRef.current.onerror = handleDone
-
-        const playPromise = audioElementRef.current.play()
-        if (playPromise !== undefined) {
-          playPromise.catch(() => handleDone())
-        }
-        return
+      // Déverrouiller l'audio s'il ne l'est pas déjà
+      if (!audioUnlocked) {
+        unlockAudio()
       }
 
-      // Sinon, c'est du texte pour TTS (ancien comportement)
-      console.log('[useVoice] Lecture TTS:', audioUrl)
-
-      // Annuler un éventuel timer de fin gracieuse si une nouvelle phrase arrive
-      if (endGraceTimeoutRef.current) {
-        clearTimeout(endGraceTimeoutRef.current)
-        endGraceTimeoutRef.current = null
+      // Utiliser un élément audio réutilisable
+      if (!audioElementRef.current) {
+        audioElementRef.current = new Audio()
+        audioElementRef.current.volume = 1.0
+      } else {
+        // Stopper la lecture en cours et nettoyer les événements
+        audioElementRef.current.pause()
+        audioElementRef.current.currentTime = 0
+        audioElementRef.current.onplay = null
+        audioElementRef.current.onended = null
+        audioElementRef.current.onerror = null
       }
 
-      const utterance = new SpeechSynthesisUtterance(audioUrl)
-      utterance.lang = 'fr-FR'
-      utterance.rate = 0.9
-      // Choisir une voix FR si disponible pour éviter le délai de sélection implicite
-      try {
-        const list = (typeof window !== 'undefined' && window.speechSynthesis?.getVoices?.()) || voicesRef.current || []
-        const frVoice = Array.isArray(list) ? (list.find(v => /fr/i.test(v.lang)) || list.find(v => /fr|french/i.test(v.name)) || list[0]) : null
-        if (frVoice) utterance.voice = frVoice
-      } catch {}
+      audioElementRef.current.src = audioUrl
 
-      utterance.onstart = () => {
-        activeUtterancesRef.current += 1
+      audioElementRef.current.onplay = () => {
         setIsPlaying(true)
       }
-      const handleDone = () => {
-        activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1)
-        // Laisser une petite marge pour enchaîner la prochaine phrase sans couper la vidéo
-        if (activeUtterancesRef.current === 0) {
-          endGraceTimeoutRef.current = setTimeout(() => {
-            if (activeUtterancesRef.current === 0) {
-              setIsPlaying(false)
-            }
-          }, 200)
-        }
-      }
-      utterance.onend = handleDone
-      utterance.onerror = handleDone
 
-      speechSynthesis.speak(utterance)
+      const handleDone = () => {
+        setIsPlaying(false)
+      }
+
+      audioElementRef.current.onended = handleDone
+      audioElementRef.current.onerror = handleDone
+
+      const playPromise = audioElementRef.current.play()
+      if (playPromise !== undefined) {
+        playPromise.catch(() => handleDone())
+      }
     } catch (error) {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
