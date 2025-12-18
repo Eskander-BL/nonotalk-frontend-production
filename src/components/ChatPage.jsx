@@ -360,14 +360,14 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
+          // Appel audio: si audio_path existe => appeler playAudio() immediatement
+          if (data.ai_message?.audio_path) {
+            setTimeout(() => {
+              playAudio(data.ai_message.audio_path)
+            }, 300)
+          }
+
           return data
-        }
-        
-        // Appel audio: si audio_path existe => appeler playAudio() immediatement
-        if (data.ai_message?.audio_path) {
-          setTimeout(() => {
-            playAudio(data.ai_message.audio_path)
-          }, 300)
         }
       } else if (response.status === 403) {
         console.warn('[ChatPage] Quota épuisé (403)')
