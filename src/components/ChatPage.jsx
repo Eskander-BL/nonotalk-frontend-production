@@ -360,15 +360,20 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
-          // Déclencher la lecture audio si disponible
-          if (data.ai_message?.audio_path) {
-            console.log('[ChatPage] Playing audio:', data.ai_message.audio_path)
-            setTimeout(() => {
-              playAudio(data.ai_message.audio_path)
-            }, 500)  // Délai pour que le message s'affiche d'abord
-          }
-
           return data
+        }
+        
+        // IMPORTANT: Appel audio HORS de setMessages() pour garantir execution sur mobile
+        // Pas de condition desktop/mobile, pas de verification stream
+        // Si audio_path existe => appeler playAudio() immediatement
+        if (data.ai_message?.audio_path) {
+          console.log('[ChatPage] AUDIO TRIGGER: audio_path trouve, appel playAudio()', data.ai_message.audio_path)
+          setTimeout(() => {
+            console.log('[ChatPage] AUDIO EXEC: playAudio() executee')
+            playAudio(data.ai_message.audio_path)
+          }, 300)  // Delai court pour que le message s'affiche
+        } else {
+          console.warn('[ChatPage] AUDIO SKIP: Pas d audio_path dans la reponse')
         }
       } else if (response.status === 403) {
         console.warn('[ChatPage] Quota épuisé (403)')
