@@ -4,10 +4,12 @@ import { API_URL, getAuthFetchOptions } from '../lib/api'
 export function useVoice() {
   const [isRecording, setIsRecording] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const silenceTimeoutRef = useRef(null)
   const audioContextRef = useRef(null)
+  const audioElementRef = useRef(null)
   const activeUtterancesRef = useRef(0)
   const endGraceTimeoutRef = useRef(null)
   const speechRecRef = useRef(null)
@@ -41,8 +43,31 @@ export function useVoice() {
     } catch {}
   }, [])
 
+  // Déverrouiller l'audio au premier clic utilisateur (contourne Autoplay Policy sur mobile)
+  const unlockAudio = useCallback(() => {
+    if (audioUnlocked) return
+    try {
+      // Créer un AudioContext (déverrouille l'audio sur mobile)
+      if (!audioContextRef.current && typeof window !== 'undefined' && window.AudioContext) {
+        audioContextRef.current = new window.AudioContext()
+      }
+      // Créer un élément audio silencieux et le jouer pour déverrouiller
+      if (!audioElementRef.current) {
+        audioElementRef.current = new Audio()
+        audioElementRef.current.volume = 0
+        audioElementRef.current.play().catch(() => {})
+      }
+      console.log("[AUDIO] unlockAudio called", audioUnlocked, audioContextRef.current?.state); setAudioUnlocked(true)
+      console.log('[useVoice] Audio déverrouillé')
+    } catch (e) {
+      console.error('[useVoice] Erreur déverrouillage audio:', e)
+    }
+  }, [audioUnlocked])
+
   const startRecording = useCallback(async (onTranscriptionComplete) => {
     console.log('[useVoice] startRecording()')
+    // Déverrouiller l'audio au premier clic
+    unlockAudio()
     try {
       // Mode STT via MediaRecorder + backend (plus fiable sur tous les devices)
       const SpeechRec = false // Désactivé pour utiliser MediaRecorder partout
@@ -324,15 +349,77 @@ export function useVoice() {
     }
   }
 
-  const playAudio = useCallback(async (text) => {
+  const playAudio = useCallback(async (audioUrl) => {
     try {
+      console.log('[useVoice] playAudio() appelée avec:', audioUrl, 'type:', typeof audioUrl)
+      
+      // Vérifier si c'est une URL d'audio (fichier MP3 du backend)
+      // Accepter: /api/audio, https://.../api/audio, .mp3, .wav, etc.
+      const isAudioUrl = audioUrl && (
+        typeof audioUrl === 'string' && (
+          audioUrl.includes('/api/audio') ||
+          audioUrl.endsWith('.mp3') ||
+          audioUrl.endsWith('.wav') ||
+          audioUrl.endsWith('.m4a') ||
+          audioUrl.startsWith('http') && (audioUrl.includes('audio') || audioUrl.includes('.mp3') || audioUrl.includes('.wav'))
+        )
+      )
+      
+      console.log('[useVoice] isAudioUrl:', isAudioUrl, 'audioUrl:', audioUrl)
+      
+      if (isAudioUrl) {
+        console.log('[useVoice] Lecture audio MP3:', audioUrl)
+        
+        // Déverrouiller l'audio s'il ne l'est pas déjà
+        if (!audioUnlocked) {
+          unlockAudio()
+        }
+        
+        // Créer un nouvel élément audio
+        const audio = new Audio()
+        audio.src = audioUrl
+        audio.volume = 1.0
+        
+        audio.onplay = () => {
+          setIsPlaying(true)
+          console.log('[useVoice] Audio en lecture')
+        }
+        
+        const handleDone = () => {
+          setIsPlaying(false)
+          console.log('[useVoice] Audio terminé')
+        }
+        
+        audio.onended = handleDone
+        audio.onerror = (e) => {
+          console.error('[useVoice] Erreur lecture audio:', e)
+          handleDone()
+        }
+        
+        // Jouer l'audio
+        console.log("[AUDIO] Trying to play", audioUrl);
+        const playPromise = audio.play()
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => console.log("[AUDIO] play() SUCCESS"))
+            .catch((error) => {
+              console.error("[AUDIO] play() FAILED", error)
+              handleDone()
+            })
+        }
+        return
+      }
+      
+      // Sinon, c'est du texte pour TTS (ancien comportement)
+      console.log('[useVoice] Lecture TTS:', audioUrl)
+      
       // Annuler un éventuel timer de fin gracieuse si une nouvelle phrase arrive
       if (endGraceTimeoutRef.current) {
         clearTimeout(endGraceTimeoutRef.current)
         endGraceTimeoutRef.current = null
       }
 
-      const utterance = new SpeechSynthesisUtterance(text)
+      const utterance = new SpeechSynthesisUtterance(audioUrl)
       utterance.lang = 'fr-FR'
       utterance.rate = 0.9
       // Choisir une voix FR si disponible pour éviter le délai de sélection implicite
@@ -365,7 +452,7 @@ export function useVoice() {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
     }
-  }, [])
+  }, [audioUnlocked, unlockAudio])
 
   const stopAudio = useCallback(() => {
     try {

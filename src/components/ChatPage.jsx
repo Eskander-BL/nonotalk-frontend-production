@@ -360,6 +360,14 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
+          // Déclencher la lecture audio si disponible
+          if (data.ai_message?.audio_path) {
+            console.log('[ChatPage] Playing audio:', data.ai_message.audio_path)
+            setTimeout(() => {
+              playAudio(data.ai_message.audio_path)
+            }, 500)  // Délai pour que le message s'affiche d'abord
+          }
+
           return data
         }
       } else if (response.status === 403) {
@@ -689,6 +697,20 @@ export default function ChatPage() {
               <Mic className="h-6 w-6 text-white" />
             )}
           </Button>
+          
+          {/* Bouton de test temporaire pour vérifier la lecture audio */}
+          <Button
+            onClick={() => {
+              console.log('[DEBUG] Test audio button clicked')
+              playAudio('/api/audio/test.mp3')
+            }}
+            variant="outline"
+            size="sm"
+            className="text-xs cursor-pointer"
+            title="Test audio (temporaire)"
+          >
+            🔊 Test
+          </Button>
 
           {isPlaying && (
               <Button
@@ -707,6 +729,11 @@ export default function ChatPage() {
             <p className="text-sm text-gray-600">🎤 Enregistrement en cours...</p>
           </div>
         )}
+        
+        {/* Debug info */}
+        <div className="text-center mt-2 text-xs text-gray-500">
+          <p>Device: {isMobile ? 'Mobile' : 'Desktop'}</p>
+        </div>
       </div>
 
       {/* Crisis Alert Dialog */}
