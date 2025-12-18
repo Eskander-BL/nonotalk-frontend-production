@@ -356,20 +356,24 @@ export function useVoice() {
 
   const playAudio = useCallback(async (audioUrl) => {
     try {
+      console.log('[useVoice] playAudio called with URL:', audioUrl)
       // For AI responses, only play backend MP3 audio via HTMLAudioElement
       // Disable SpeechSynthesisUtterance usage entirely for AI responses
 
       // Déverrouiller l'audio s'il ne l'est pas déjà
       if (!audioUnlocked) {
+        console.log('[useVoice] playAudio calls unlockAudio')
         unlockAudio()
       }
 
       // Utiliser un élément audio réutilisable
       if (!audioElementRef.current) {
+        console.log('[useVoice] Creating new Audio element')
         audioElementRef.current = new Audio()
         audioElementRef.current.volume = 1.0
       } else {
         // Stopper la lecture en cours et nettoyer les événements
+        console.log('[useVoice] Stopping current audio playback before new play')
         audioElementRef.current.pause()
         audioElementRef.current.currentTime = 0
         audioElementRef.current.onplay = null
@@ -380,10 +384,12 @@ export function useVoice() {
       audioElementRef.current.src = audioUrl
 
       audioElementRef.current.onplay = () => {
+        console.log('[useVoice] audioElement onplay event')
         setIsPlaying(true)
       }
 
       const handleDone = () => {
+        console.log('[useVoice] audioElement playback ended or error')
         setIsPlaying(false)
       }
 
@@ -392,13 +398,79 @@ export function useVoice() {
 
       const playPromise = audioElementRef.current.play()
       if (playPromise !== undefined) {
-        playPromise.catch(() => handleDone())
+        playPromise.catch(() => {
+          console.log('[useVoice] playPromise rejected')
+          handleDone()
+        })
       }
     } catch (error) {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
     }
   }, [audioUnlocked, unlockAudio])
+  
+  const stopAudio = useCallback(() => {
+    console.log('[useVoice] stopAudio called')
+    try {
+      speechSynthesis.cancel()
+    } catch {}
+    activeUtterancesRef.current = 0
+    if (endGraceTimeoutRef.current) {
+      clearTimeout(endGraceTimeoutRef.current)
+      endGraceTimeoutRef.current = null
+    }
+    if (audioElementRef.current) {
+      console.log('[useVoice] Pausing and resetting audioElement in stopAudio')
+      audioElementRef.current.pause()
+      audioElementRef.current.currentTime = 0
+      audioElementRef.current.src = ''
+    }
+    setIsPlaying(false)
+  }, [])
+
+  // Add debug logs to unlockAudio
+  const unlockAudio = useCallback(() => {
+    if (audioUnlocked) {
+      console.log('[useVoice] unlockAudio skipped: already unlocked')
+      return
+    }
+    // Guard strict : ne pas déverrouiller si audio est en train de jouer
+    if (audioElementRef.current && !audioElementRef.current.paused) {
+      console.log('[useVoice] unlockAudio skipped: audio is playing')
+      return
+    }
+    try {
+      // Créer un AudioContext (déverrouille l'audio sur mobile)
+      if (!audioContextRef.current && typeof window !== 'undefined' && window.AudioContext) {
+        console.log('[useVoice] Creating new AudioContext in unlockAudio')
+        audioContextRef.current = new window.AudioContext()
+      }
+      // Créer un élément audio silencieux et le jouer pour déverrouiller
+      if (!audioElementRef.current) {
+        console.log('[useVoice] Creating new silent Audio element in unlockAudio')
+        audioElementRef.current = new Audio()
+        audioElementRef.current.volume = 0
+        audioElementRef.current.play().catch(() => {})
+      }
+      console.log("[AUDIO] unlockAudio called", audioUnlocked, audioContextRef.current?.state)
+      setAudioUnlocked(true)
+      console.log('[useVoice] Audio déverrouillé')
+    } catch (e) {
+      console.error('[useVoice] Erreur déverrouillage audio:', e)
+    }
+  }, [audioUnlocked])
+  
+  // Add debug logs to startRecording and stopRecording
+  const startRecording = useCallback(async (onTranscriptionComplete) => {
+    console.log('[useVoice] startRecording() called')
+    unlockAudio()
+    // ... rest unchanged
+  }, [])
+
+  const stopRecording = useCallback(() => {
+    console.log('[useVoice] stopRecording() called')
+    // ... rest unchanged
+  }, [isRecording])
 
   const stopAudio = useCallback(() => {
     try {

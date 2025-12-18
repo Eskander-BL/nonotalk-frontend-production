@@ -74,17 +74,10 @@ export default function ChatPage() {
       if (response.ok) {
         const audioBlob = await response.blob()
         const audioUrl = URL.createObjectURL(audioBlob)
-        const audio = new Audio(audioUrl)
-        
-        audio.onplay = () => {
-          // Utiliser la fonction setIsPlaying de useVoice si disponible
-          // Sinon on pourrait ajouter un état local
-        }
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl)
-        }
-        
-        await audio.play()
+        console.log('[ChatPage] playElevenLabsAudio received audioUrl:', audioUrl)
+        // Utiliser le lecteur audio singleton de useVoice pour la lecture
+        await playAudio(audioUrl)
+        URL.revokeObjectURL(audioUrl)
       } else {
         console.error('Erreur ElevenLabs, fallback sur Web Speech')
         playAudio(text)
