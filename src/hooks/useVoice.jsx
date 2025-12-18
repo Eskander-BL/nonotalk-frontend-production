@@ -46,6 +46,11 @@ export function useVoice() {
   // Déverrouiller l'audio au premier clic utilisateur (contourne Autoplay Policy sur mobile)
   const unlockAudio = useCallback(() => {
     if (audioUnlocked) return
+    // Guard strict : ne pas déverrouiller si audio est en train de jouer
+    if (audioElementRef.current && !audioElementRef.current.paused) {
+      console.log('[useVoice] unlockAudio skipped: audio is playing')
+      return
+    }
     try {
       // Créer un AudioContext (déverrouille l'audio sur mobile)
       if (!audioContextRef.current && typeof window !== 'undefined' && window.AudioContext) {
