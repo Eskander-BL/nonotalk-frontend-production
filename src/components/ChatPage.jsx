@@ -362,9 +362,7 @@ export default function ChatPage() {
 
           // Appel audio: si audio_path existe => appeler playAudio() immediatement
           if (data.ai_message?.audio_path) {
-            setTimeout(() => {
-              playAudio(data.ai_message.audio_path)
-            }, 300)
+            playAudio(data.ai_message.audio_path)
           }
 
           return data

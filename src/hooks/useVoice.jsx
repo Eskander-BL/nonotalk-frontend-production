@@ -363,38 +363,47 @@ export function useVoice() {
       )
       
       if (isAudioUrl) {
-        
         // Déverrouiller l'audio s'il ne l'est pas déjà
         if (!audioUnlocked) {
           unlockAudio()
         }
-        
-        // Créer un nouvel élément audio
-        const audio = new Audio()
-        audio.src = audioUrl
-        audio.volume = 1.0
-        
-        audio.onplay = () => {
+
+        // Utiliser un élément audio réutilisable
+        if (!audioElementRef.current) {
+          audioElementRef.current = new Audio()
+          audioElementRef.current.volume = 1.0
+        } else {
+          // Stopper la lecture en cours et nettoyer les événements
+          audioElementRef.current.pause()
+          audioElementRef.current.currentTime = 0
+          audioElementRef.current.onplay = null
+          audioElementRef.current.onended = null
+          audioElementRef.current.onerror = null
+        }
+
+        audioElementRef.current.src = audioUrl
+
+        audioElementRef.current.onplay = () => {
           setIsPlaying(true)
         }
-        
+
         const handleDone = () => {
           setIsPlaying(false)
         }
-        
-        audio.onended = handleDone
-        audio.onerror = handleDone
-        
-        const playPromise = audio.play()
+
+        audioElementRef.current.onended = handleDone
+        audioElementRef.current.onerror = handleDone
+
+        const playPromise = audioElementRef.current.play()
         if (playPromise !== undefined) {
           playPromise.catch(() => handleDone())
         }
         return
       }
-      
+
       // Sinon, c'est du texte pour TTS (ancien comportement)
       console.log('[useVoice] Lecture TTS:', audioUrl)
-      
+
       // Annuler un éventuel timer de fin gracieuse si une nouvelle phrase arrive
       if (endGraceTimeoutRef.current) {
         clearTimeout(endGraceTimeoutRef.current)
