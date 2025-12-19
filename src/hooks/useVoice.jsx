@@ -302,35 +302,47 @@ export function useVoice() {
         endGraceTimeoutRef.current = null
       }
 
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'fr-FR'
-      utterance.rate = 0.9
-      // Choisir une voix FR si disponible pour éviter le délai de sélection implicite
-      try {
-        const list = (typeof window !== 'undefined' && window.speechSynthesis?.getVoices?.()) || voicesRef.current || []
-        const frVoice = Array.isArray(list) ? (list.find(v => /fr/i.test(v.lang)) || list.find(v => /fr|french/i.test(v.name)) || list[0]) : null
-        if (frVoice) utterance.voice = frVoice
-      } catch {}
+      // Correction ciblée Safari mobile: forcer play() dans un user gesture si nécessaire
+      const ua = navigator.userAgent || navigator.vendor || window.opera
+      const isSafariMobile = /iP(ad|hone|od).+Version\/[\d.]+.*Safari/i.test(ua)
+      const audioPlay = () => {
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = 'fr-FR'
+        utterance.rate = 0.9
+        try {
+          const list = (typeof window !== 'undefined' && window.speechSynthesis?.getVoices?.()) || voicesRef.current || []
+          const frVoice = Array.isArray(list) ? (list.find(v => /fr/i.test(v.lang)) || list.find(v => /fr|french/i.test(v.name)) || list[0]) : null
+          if (frVoice) utterance.voice = frVoice
+        } catch {}
 
-      utterance.onstart = () => {
-        activeUtterancesRef.current += 1
-        setIsPlaying(true)
-      }
-      const handleDone = () => {
-        activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1)
-        // Laisser une petite marge pour enchaîner la prochaine phrase sans couper la vidéo
-        if (activeUtterancesRef.current === 0) {
-          endGraceTimeoutRef.current = setTimeout(() => {
-            if (activeUtterancesRef.current === 0) {
-              setIsPlaying(false)
-            }
-          }, 200)
+        utterance.onstart = () => {
+          activeUtterancesRef.current += 1
+          setIsPlaying(true)
         }
-      }
-      utterance.onend = handleDone
-      utterance.onerror = handleDone
+        const handleDone = () => {
+          activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1)
+          if (activeUtterancesRef.current === 0) {
+            endGraceTimeoutRef.current = setTimeout(() => {
+              if (activeUtterancesRef.current === 0) {
+                setIsPlaying(false)
+              }
+            }, 200)
+          }
+        }
+        utterance.onend = handleDone
+        utterance.onerror = handleDone
 
-      speechSynthesis.speak(utterance)
+        speechSynthesis.speak(utterance)
+      }
+
+      if (isSafariMobile) {
+        // Forcer play dans un user gesture context (ex: setTimeout 0)
+        setTimeout(() => {
+          audioPlay()
+        }, 0)
+      } else {
+        audioPlay()
+      }
     } catch (error) {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
