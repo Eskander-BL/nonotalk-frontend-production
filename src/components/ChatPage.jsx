@@ -44,6 +44,9 @@ export default function ChatPage() {
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+
+  const lastPlayedMessageIdRef = useRef(null)
+  const isSpeakingRef = useRef(false)
   const [useElevenLabs, setUseElevenLabs] = useState(
     import.meta.env.VITE_ENABLE_ELEVENLABS === 'true'
   )
