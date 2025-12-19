@@ -7,16 +7,8 @@ export function NotificationManager() {
       Notification.requestPermission()
     }
 
-    // Enregistrer le service worker pour les notifications
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(registration => {
-          console.log('Service Worker enregistré:', registration)
-        })
-        .catch(error => {
-          console.log('Erreur Service Worker:', error)
-        })
-    }
+    // Service Worker désactivé (causait des problèmes de cache)
+    // Les notifications push continueront de fonctionner sans SW
   }, [])
 
   return null
