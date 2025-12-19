@@ -319,12 +319,13 @@ export default function ChatPage() {
               // Mettre à jour le quota utilisateur
               if (user) {
                 updateUser({ ...user, quota_remaining: data.quota_remaining })
-                console.log('[ChatPage] Quota restant:', data.quota_remaining)
               }
 
-              // Correction ciblée: jouer audio_path si présent, sur tous devices
-              if (data.ai_message && data.ai_message.audio_path) {
-                playAudio(data.ai_message.audio_path)
+              // Appel audio AVANT le return avec délai pour garantir exécution
+              if (data.ai_message?.audio_path) {
+                setTimeout(() => {
+                  playAudio(data.ai_message.audio_path)
+                }, 300)
               }
 
               return data
