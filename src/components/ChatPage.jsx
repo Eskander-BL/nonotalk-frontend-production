@@ -45,17 +45,14 @@ export default function ChatPage() {
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
+  // Refs for audio playback control
   const lastPlayedMessageIdRef = useRef(null)
   const isSpeakingRef = useRef(false)
-  const [useElevenLabs, setUseElevenLabs] = useState(
-    import.meta.env.VITE_ENABLE_ELEVENLABS === 'true'
-  )
-  
-  // Fonctions de gestion de la déconnexion
+
+  // Functions for logout
   const cancelLogout = () => {
     setShowLogoutConfirm(false)
   }
-}
 
   const confirmLogout = async () => {
     setShowLogoutConfirm(false)
@@ -67,7 +64,7 @@ export default function ChatPage() {
     setShowLogoutConfirm(true)
   }
 
-  // Fonction pour jouer l'audio avec ElevenLabs
+  // Function to play audio with ElevenLabs TTS
   const playElevenLabsAudio = async (text) => {
     try {
       const response = await fetch(`${API_URL}/tts/elevenlabs`, getAuthFetchOptions({
@@ -79,7 +76,6 @@ export default function ChatPage() {
         const audioBlob = await response.blob()
         const audioUrl = URL.createObjectURL(audioBlob)
         console.log('[ChatPage] playElevenLabsAudio received audioUrl:', audioUrl)
-        // Utiliser le lecteur audio singleton de useVoice pour la lecture
         await playAudio(audioUrl)
         URL.revokeObjectURL(audioUrl)
       } else {
@@ -92,6 +88,7 @@ export default function ChatPage() {
     }
   }
 
+  // Other refs
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const lastTranscriptRef = useRef(null)
@@ -99,20 +96,17 @@ export default function ChatPage() {
   const videoRef = useRef(null)
   const lastMicEndRef = useRef(null)
   const avatarContainerRef = useRef(null)
+
   useEffect(() => {
     initializeApp()
   }, [])
 
-  // Définir l'état initial de la sidebar selon le device
   useEffect(() => {
     if (isMobile !== undefined) {
       setShowSidebar(!isMobile)
     }
   }, [isMobile])
 
-  // Pas de scroll automatique sur mobile
-
-  // Filet de sécurité: écouter l'évènement global dispatché par useVoice()
   useEffect(() => {
     const onTranscription = async (e) => {
       try {
@@ -129,7 +123,6 @@ export default function ChatPage() {
         }
         lastTranscriptRef.current = clean
 
-        // S'assurer d'avoir un convId
         let targetConvId = currentConversation?.id
         if (!targetConvId) {
           const conv = await createMainConversation()
@@ -150,20 +143,16 @@ export default function ChatPage() {
     return () => window.removeEventListener('voice:transcription', onTranscription)
   }, [currentConversation])
 
-  // Auto scroll en bas de l'historique quand de nouveaux messages arrivent
   useEffect(() => {
     if (historyRef.current) {
       if (isMobile) {
-        // Sur mobile, scroll en haut pour voir l'avatar et phrase d'accueil
         historyRef.current.scrollTop = 0
       } else {
-        // Sur desktop, scroll en bas pour voir les derniers messages
         historyRef.current.scrollTop = historyRef.current.scrollHeight
       }
     }
   }, [messages, showSidebar, isMobile])
 
-  // Contrôle lecture vidéo avatar selon isPlaying
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
@@ -181,24 +170,20 @@ export default function ChatPage() {
     } catch {}
   }, [isPlaying])
 
-  // Enregistrer l'instant de fin de parole pour temporiser le démarrage du TTS (250–500ms après fermeture micro)
   useEffect(() => {
     const onSpeechEnd = () => { lastMicEndRef.current = Date.now() }
     window.addEventListener('voice:speech_end', onSpeechEnd)
     return () => window.removeEventListener('voice:speech_end', onSpeechEnd)
   }, [])
 
-
   const initializeApp = async () => {
     await checkQuota()
-    // Charger les conversations existantes (et leurs 10 derniers messages)
     await loadConversations()
   }
 
   const checkQuota = async () => {
     try {
       const response = await fetch(`${API_URL}/auth/check-quota`, getAuthFetchOptions())
-      
       if (response.ok) {
         const data = await response.json()
         if (data.quota_remaining <= 2) {
@@ -213,38 +198,31 @@ export default function ChatPage() {
   const loadConversations = async () => {
     try {
       const response = await fetch(`${API_URL}/chat/conversations`, getAuthFetchOptions())
-      
       if (response.ok) {
         const data = await response.json()
         setConversations(data.conversations)
-        // Mettre en cache local les 10 dernières conversations
         try {
           localStorage.setItem('recentConversations', JSON.stringify(data.conversations.slice(0, 10)))
         } catch (e) {
           console.warn('Impossible d\'enregistrer le cache conversations:', e)
         }
-        
-  // Charger la première conversation ou en créer une nouvelle
-  if (data.conversations.length > 0) {
-    selectConversation(data.conversations[0])
-  } else {
-    await createMainConversation()
-  }
-  // Sur mobile, forcer l'ouverture de la sidebar pour afficher l'historique
-  if (isMobile) {
-    setShowSidebar(true)
-  }
+        if (data.conversations.length > 0) {
+          selectConversation(data.conversations[0])
+        } else {
+          await createMainConversation()
+        }
+        if (isMobile) {
+          setShowSidebar(true)
+        }
       }
     } catch (error) {
       console.error('Erreur lors du chargement des conversations:', error)
-      // Fallback offline: essayer le cache local des conversations + messages
       try {
         const cached = localStorage.getItem('recentConversations')
         if (cached) {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed) && parsed.length > 0) {
             setConversations(parsed)
-            // sélectionner la première pour charger ses messages en cache
             selectConversation(parsed[0])
           }
         }
@@ -260,7 +238,6 @@ export default function ChatPage() {
         method: 'POST',
         body: JSON.stringify({ title: 'Conversation avec Nono' })
       }))
-      
       if (response.ok) {
         const data = await response.json()
         setCurrentConversation(data.conversation)
@@ -275,8 +252,6 @@ export default function ChatPage() {
 
   const selectConversation = async (conversation) => {
     setCurrentConversation(conversation)
-
-    // Pré-remplir avec le cache local si disponible
     try {
       const cacheKey = `recentMessages:${conversation.id}`
       const cached = localStorage.getItem(cacheKey)
@@ -289,20 +264,16 @@ export default function ChatPage() {
     } catch (e) {
       console.warn('Cache messages invalide:', e)
     }
-    
     try {
       const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, getAuthFetchOptions())
-      
       if (response.ok) {
         const data = await response.json()
         setMessages(data.messages)
-        // Mettre en cache local les 10 derniers messages
         try {
           localStorage.setItem(`recentMessages:${conversation.id}`, JSON.stringify(data.messages.slice(-10)))
         } catch (e) {
           console.warn('Impossible d\'enregistrer le cache messages:', e)
         }
-        // Ouvrir l’historique sur desktop, ouvert par défaut sur mobile
         if (isMobile !== undefined) {
           setShowSidebar(true)
         }
@@ -312,88 +283,71 @@ export default function ChatPage() {
     }
   }
 
-  import { useState, useEffect, useRef } from 'react'
-  // ... other imports remain unchanged
+  const sendMessage = async (messageContent, emotion = null, conversationIdOverride = null) => {
+    const convId = conversationIdOverride ?? currentConversation?.id
+    console.log('[ChatPage] sendMessage called:', { messageContent, hasConversation: !!convId })
+    if (!messageContent.trim() || !convId) return null
 
-  export default function ChatPage() {
-    // ... other hooks and state remain unchanged
+    setIsLoading(true)
 
-    const lastPlayedMessageIdRef = useRef(null)
+    try {
+      console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
+      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
+        method: 'POST',
+        body: JSON.stringify({ 
+          message: messageContent,
+          emotion: emotion 
+        })
+      }))
 
-    const sendMessage = async (messageContent, emotion = null, conversationIdOverride = null) => {
-      const convId = conversationIdOverride ?? currentConversation?.id
-      console.log('[ChatPage] sendMessage called:', { messageContent, hasConversation: !!convId })
-      if (!messageContent.trim() || !convId) return null
+      const data = await response.json()
+      console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
+      console.log('[ChatPage] AI message content:', data.ai_message?.content)
 
-      setIsLoading(true)
-
-      try {
-        console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
-        const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
-          method: 'POST',
-          body: JSON.stringify({ 
-            message: messageContent,
-            emotion: emotion 
+      if (response.ok) {
+        if (data.crisis_detected) {
+          setCrisisAlert(data.emergency_message)
+        } else {
+          console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
+          setMessages(prev => {
+            const next = [...prev, data.user_message, data.ai_message]
+            console.log('[ChatPage] Messages after update:', next.length, 'total messages')
+            console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
+            try {
+              localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+            } catch (e) {
+              console.warn('Impossible d\'enregistrer le cache messages:', e)
+            }
+            return next
           })
-        }))
-
-        const data = await response.json()
-        console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
-        console.log('[ChatPage] AI message content:', data.ai_message?.content)
-
-        if (response.ok) {
-          if (data.crisis_detected) {
-            setCrisisAlert(data.emergency_message)
-          } else {
-            // Ajouter les messages à la conversation + MAJ cache local
-            console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
-            setMessages(prev => {
-              const next = [...prev, data.user_message, data.ai_message]
-              console.log('[ChatPage] Messages after update:', next.length, 'total messages')
-              console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
-              try {
-                localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
-              } catch (e) {
-                console.warn('Impossible d\'enregistrer le cache messages:', e)
-              }
-              return next
-            })
-            
-            // Mettre à jour le quota utilisateur
-            if (user) {
-              updateUser({ ...user, quota_remaining: data.quota_remaining })
-              console.log('[ChatPage] Quota restant:', data.quota_remaining)
-            }
-
-            // Appel audio: si audio_path existe => appeler playAudio() immediatement
-            if (data.ai_message?.audio_path) {
-              if (lastPlayedMessageIdRef.current !== data.ai_message.id && !isPlaying) {
-                lastPlayedMessageIdRef.current = data.ai_message.id
-                playAudio(data.ai_message.audio_path)
-              } else {
-                console.log('[ChatPage] Audio already playing or message already played, skipping playAudio')
-              }
-            }
-
-            return data
+          if (user) {
+            updateUser({ ...user, quota_remaining: data.quota_remaining })
+            console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
-        } else if (response.status === 403) {
-          console.warn('[ChatPage] Quota épuisé (403)')
-          setQuotaWarning(true)
-        } else if (response.status === 401) {
-          console.warn('[ChatPage] Non connecté (401), redirection vers /login')
-          navigate('/login')
+          if (data.ai_message?.audio_path) {
+            if (lastPlayedMessageIdRef.current !== data.ai_message.id && !isPlaying) {
+              lastPlayedMessageIdRef.current = data.ai_message.id
+              playAudio(data.ai_message.audio_path)
+            } else {
+              console.log('[ChatPage] Audio already playing or message already played, skipping playAudio')
+            }
+          }
+          return data
         }
-      } catch (error) {
-        console.error('Erreur lors de l\'envoi du message:', error)
-      } finally {
-        setIsLoading(false)
+      } else if (response.status === 403) {
+        console.warn('[ChatPage] Quota épuisé (403)')
+        setQuotaWarning(true)
+      } else if (response.status === 401) {
+        console.warn('[ChatPage] Non connecté (401), redirection vers /login')
+        navigate('/login')
       }
-      
-      return null
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du message:', error)
+    } finally {
+      setIsLoading(false)
     }
-
-
+    return null
+  }
 
   const speakText = async (text) => {
     if (useElevenLabs) {
@@ -408,14 +362,11 @@ export default function ChatPage() {
     if (isRecording) {
       stopRecording()
     } else {
-      // Créer la conversation principale si nécessaire
       let convId = currentConversation?.id
       if (!convId) {
         const conv = await createMainConversation()
         convId = conv?.id
       }
-      
-      // Démarrer l'enregistrement avec callback pour traiter le transcript
       console.log('[ChatPage] Appel startRecording avec callback')
       await startRecording(async (transcript) => {
         try {
@@ -426,9 +377,7 @@ export default function ChatPage() {
             return
           }
           lastTranscriptRef.current = cleanTranscript
-
           if (cleanTranscript) {
-            // Envoyer automatiquement le message transcrit
             console.log('[ChatPage] Envoi transcript au backend via sendMessage...')
             let targetConvId = convId ?? currentConversation?.id
             if (!targetConvId) {
@@ -453,8 +402,6 @@ export default function ChatPage() {
   const handleImageUpload = async (event) => {
     const file = event.target.files[0]
     if (!file) return
-
-    // S'assurer qu'une conversation existe (création lazy si nécessaire)
     let convId = currentConversation?.id
     if (!convId) {
       const conv = await createMainConversation()
@@ -464,24 +411,17 @@ export default function ChatPage() {
         return
       }
     }
-
     const formData = new FormData()
     formData.append('image', file)
-
     setIsLoading(true)
-
     try {
-      // Pour FormData, ne pas inclure Content-Type (auto-détecté)
       const authOptions = getAuthFetchOptions({
         method: 'POST',
         body: formData
       })
-      delete authOptions.headers['Content-Type']  // Laisser le navigateur définir le boundary
-      
+      delete authOptions.headers['Content-Type']
       const response = await fetch(`${API_URL}/chat/conversations/${convId}/upload-image`, authOptions)
-
       const data = await response.json()
-
       if (response.ok) {
         setMessages(prev => {
           const next = [...prev, data.image_message, data.ai_message]
@@ -492,11 +432,9 @@ export default function ChatPage() {
           }
           return next
         })
-        
         if (user) {
           updateUser({ ...user, quota_remaining: data.quota_remaining })
         }
-
         speakText(data.ai_message.content)
       }
     } catch (error) {
@@ -837,3 +775,5 @@ export default function ChatPage() {
     </div>
   )
 }
+</final_file_content>
+</attempt_completion>
