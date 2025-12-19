@@ -354,6 +354,8 @@ export function useVoice() {
     }
   }
 
+  const isSpeakingRef = useRef(false)
+
   const playAudio = useCallback(async (audioUrl) => {
     try {
       console.log('[useVoice] playAudio called with URL:', audioUrl)
@@ -368,6 +370,9 @@ export function useVoice() {
           video.pause()
         }
       })
+
+      // Définir le flag isSpeaking à true au début de la lecture audio
+      isSpeakingRef.current = true
 
       // Déverrouiller l'audio s'il ne l'est pas déjà
       if (!audioUnlocked) {
@@ -400,6 +405,8 @@ export function useVoice() {
       const handleDone = () => {
         console.log('[useVoice] audioElement playback ended or error')
         setIsPlaying(false)
+        // Réinitialiser le flag isSpeaking à false à la fin de la lecture
+        isSpeakingRef.current = false
       }
 
       audioElementRef.current.onended = handleDone
@@ -415,8 +422,18 @@ export function useVoice() {
     } catch (error) {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
+      isSpeakingRef.current = false
     }
   }, [audioUnlocked, unlockAudio])
+
+  const startRecording = useCallback(async () => {
+    // Bloquer le démarrage de l'enregistrement si isSpeaking est true
+    if (isSpeakingRef.current) {
+      console.log('[useVoice] startRecording blocked: isSpeaking is true')
+      return
+    }
+    // ... existing startRecording logic here ...
+  }, [])
   
   const stopAudio = useCallback(() => {
     console.log('[useVoice] stopAudio called')
