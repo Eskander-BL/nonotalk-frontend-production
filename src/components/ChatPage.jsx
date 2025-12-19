@@ -52,6 +52,7 @@ export default function ChatPage() {
   const cancelLogout = () => {
     setShowLogoutConfirm(false)
   }
+}
 
   const confirmLogout = async () => {
     setShowLogoutConfirm(false)
@@ -308,73 +309,86 @@ export default function ChatPage() {
     }
   }
 
-  const sendMessage = async (messageContent, emotion = null, conversationIdOverride = null) => {
-    const convId = conversationIdOverride ?? currentConversation?.id
-    console.log('[ChatPage] sendMessage called:', { messageContent, hasConversation: !!convId })
-    if (!messageContent.trim() || !convId) return null
+  import { useState, useEffect, useRef } from 'react'
+  // ... other imports remain unchanged
 
-    setIsLoading(true)
+  export default function ChatPage() {
+    // ... other hooks and state remain unchanged
 
-    try {
-      console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
-      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
-        method: 'POST',
-        body: JSON.stringify({ 
-          message: messageContent,
-          emotion: emotion 
-        })
-      }))
+    const lastPlayedMessageIdRef = useRef(null)
 
-      const data = await response.json()
-      console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
-      console.log('[ChatPage] AI message content:', data.ai_message?.content)
+    const sendMessage = async (messageContent, emotion = null, conversationIdOverride = null) => {
+      const convId = conversationIdOverride ?? currentConversation?.id
+      console.log('[ChatPage] sendMessage called:', { messageContent, hasConversation: !!convId })
+      if (!messageContent.trim() || !convId) return null
 
-      if (response.ok) {
-        if (data.crisis_detected) {
-          setCrisisAlert(data.emergency_message)
-        } else {
-          // Ajouter les messages à la conversation + MAJ cache local
-          console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
-          setMessages(prev => {
-            const next = [...prev, data.user_message, data.ai_message]
-            console.log('[ChatPage] Messages after update:', next.length, 'total messages')
-            console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
-            try {
-              localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
-            } catch (e) {
-              console.warn('Impossible d\'enregistrer le cache messages:', e)
-            }
-            return next
+      setIsLoading(true)
+
+      try {
+        console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
+        const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
+          method: 'POST',
+          body: JSON.stringify({ 
+            message: messageContent,
+            emotion: emotion 
           })
-          
-          // Mettre à jour le quota utilisateur
-          if (user) {
-            updateUser({ ...user, quota_remaining: data.quota_remaining })
-            console.log('[ChatPage] Quota restant:', data.quota_remaining)
-          }
+        }))
 
-          // Appel audio: si audio_path existe => appeler playAudio() immediatement
-          if (data.ai_message?.audio_path) {
-            playAudio(data.ai_message.audio_path)
-          }
+        const data = await response.json()
+        console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
+        console.log('[ChatPage] AI message content:', data.ai_message?.content)
 
-          return data
+        if (response.ok) {
+          if (data.crisis_detected) {
+            setCrisisAlert(data.emergency_message)
+          } else {
+            // Ajouter les messages à la conversation + MAJ cache local
+            console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
+            setMessages(prev => {
+              const next = [...prev, data.user_message, data.ai_message]
+              console.log('[ChatPage] Messages after update:', next.length, 'total messages')
+              console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
+              try {
+                localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+              } catch (e) {
+                console.warn('Impossible d\'enregistrer le cache messages:', e)
+              }
+              return next
+            })
+            
+            // Mettre à jour le quota utilisateur
+            if (user) {
+              updateUser({ ...user, quota_remaining: data.quota_remaining })
+              console.log('[ChatPage] Quota restant:', data.quota_remaining)
+            }
+
+            // Appel audio: si audio_path existe => appeler playAudio() immediatement
+            if (data.ai_message?.audio_path) {
+              if (lastPlayedMessageIdRef.current !== data.ai_message.id && !isPlaying) {
+                lastPlayedMessageIdRef.current = data.ai_message.id
+                playAudio(data.ai_message.audio_path)
+              } else {
+                console.log('[ChatPage] Audio already playing or message already played, skipping playAudio')
+              }
+            }
+
+            return data
+          }
+        } else if (response.status === 403) {
+          console.warn('[ChatPage] Quota épuisé (403)')
+          setQuotaWarning(true)
+        } else if (response.status === 401) {
+          console.warn('[ChatPage] Non connecté (401), redirection vers /login')
+          navigate('/login')
         }
-      } else if (response.status === 403) {
-        console.warn('[ChatPage] Quota épuisé (403)')
-        setQuotaWarning(true)
-      } else if (response.status === 401) {
-        console.warn('[ChatPage] Non connecté (401), redirection vers /login')
-        navigate('/login')
+      } catch (error) {
+        console.error('Erreur lors de l\'envoi du message:', error)
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error('Erreur lors de l\'envoi du message:', error)
-    } finally {
-      setIsLoading(false)
+      
+      return null
     }
-    
-    return null
-  }
 
 
 
