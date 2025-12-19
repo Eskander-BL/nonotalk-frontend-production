@@ -360,6 +360,15 @@ export function useVoice() {
       // For AI responses, only play backend MP3 audio via HTMLAudioElement
       // Disable SpeechSynthesisUtterance usage entirely for AI responses
 
+      // Pause all videos before playing AI audio to prevent audio interruption (Safari/mobile fix)
+      const videos = document.querySelectorAll('video')
+      videos.forEach(video => {
+        if (!video.paused) {
+          console.log('[useVoice] Pausing video before playing audio')
+          video.pause()
+        }
+      })
+
       // Déverrouiller l'audio s'il ne l'est pas déjà
       if (!audioUnlocked) {
         console.log('[useVoice] playAudio calls unlockAudio')
