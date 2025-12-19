@@ -336,10 +336,9 @@ export function useVoice() {
       }
 
       if (isSafariMobile) {
-        // Forcer play dans un user gesture context (ex: setTimeout 0)
-        setTimeout(() => {
-          audioPlay()
-        }, 0)
+        // Correction Safari iOS: play audio immediately in user gesture context (tap micro)
+        // Remove setTimeout to keep user gesture intact
+        audioPlay()
       } else {
         audioPlay()
       }
