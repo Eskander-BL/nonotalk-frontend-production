@@ -363,31 +363,57 @@ export function useVoice() {
       )
       
       if (isAudioUrl) {
+        console.log('[useVoice] playAudio: MP3 file detected:', audioUrl)
         
         // Déverrouiller l'audio s'il ne l'est pas déjà
         if (!audioUnlocked) {
           unlockAudio()
         }
         
-        // Créer un nouvel élément audio
+        // Créer un nouvel élément audio et le stocker dans une référence persistante
         const audio = new Audio()
+        audio.crossOrigin = 'anonymous'
         audio.src = audioUrl
         audio.volume = 1.0
         
+        // Stocker la référence pour éviter le garbage collection
+        audioElementRef.current = audio
+        
         audio.onplay = () => {
+          console.log('[useVoice] Audio playing:', audioUrl)
           setIsPlaying(true)
         }
         
         const handleDone = () => {
+          console.log('[useVoice] Audio ended/error')
           setIsPlaying(false)
+          audioElementRef.current = null
         }
         
         audio.onended = handleDone
-        audio.onerror = handleDone
+        audio.onerror = (err) => {
+          console.error('[useVoice] Audio error:', err)
+          handleDone()
+        }
         
-        const playPromise = audio.play()
-        if (playPromise !== undefined) {
-          playPromise.catch(() => handleDone())
+        // Ajouter un timeout de sécurité (au cas où l'audio ne se termine pas)
+        const timeoutId = setTimeout(() => {
+          console.warn('[useVoice] Audio timeout - stopping playback')
+          audio.pause()
+          handleDone()
+        }, 30000) // 30 secondes max
+        
+        audio.onended = () => {
+          clearTimeout(timeoutId)
+          handleDone()
+        }
+        
+        try {
+          await audio.play()
+          console.log('[useVoice] Audio.play() resolved')
+        } catch (playErr) {
+          console.error('[useVoice] Audio.play() failed:', playErr)
+          handleDone()
         }
         return
       }
