@@ -301,36 +301,41 @@ export default function ChatPage() {
 
       const data = await response.json()
 
-      if (response.ok) {
-        if (data.crisis_detected) {
-          setCrisisAlert(data.emergency_message)
-        } else {
-          // Ajouter les messages à la conversation + MAJ cache local
-          setMessages(prev => {
-            const next = [...prev, data.user_message, data.ai_message]
-            try {
-              localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
-            } catch (e) {
-              console.warn('Impossible d\'enregistrer le cache messages:', e)
-            }
-            return next
-          })
-          
-          // Mettre à jour le quota utilisateur
-          if (user) {
-            updateUser({ ...user, quota_remaining: data.quota_remaining })
-            console.log('[ChatPage] Quota restant:', data.quota_remaining)
-          }
+          if (response.ok) {
+            if (data.crisis_detected) {
+              setCrisisAlert(data.emergency_message)
+            } else {
+              // Ajouter les messages à la conversation + MAJ cache local
+              setMessages(prev => {
+                const next = [...prev, data.user_message, data.ai_message]
+                try {
+                  localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+                } catch (e) {
+                  console.warn('Impossible d\'enregistrer le cache messages:', e)
+                }
+                return next
+              })
+              
+              // Mettre à jour le quota utilisateur
+              if (user) {
+                updateUser({ ...user, quota_remaining: data.quota_remaining })
+                console.log('[ChatPage] Quota restant:', data.quota_remaining)
+              }
 
-          return data
-        }
-      } else if (response.status === 403) {
-        console.warn('[ChatPage] Quota épuisé (403)')
-        setQuotaWarning(true)
-      } else if (response.status === 401) {
-        console.warn('[ChatPage] Non connecté (401), redirection vers /login')
-        navigate('/login')
-      }
+              // Correction ciblée: jouer audio_path si présent, sur tous devices
+              if (data.ai_message && data.ai_message.audio_path) {
+                playAudio(data.ai_message.audio_path)
+              }
+
+              return data
+            }
+          } else if (response.status === 403) {
+            console.warn('[ChatPage] Quota épuisé (403)')
+            setQuotaWarning(true)
+          } else if (response.status === 401) {
+            console.warn('[ChatPage] Non connecté (401), redirection vers /login')
+            navigate('/login')
+          }
     } catch (error) {
       console.error('Erreur lors de l\'envoi du message:', error)
     } finally {
