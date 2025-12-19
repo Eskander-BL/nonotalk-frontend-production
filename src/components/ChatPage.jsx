@@ -278,6 +278,9 @@ export default function ChatPage() {
     }
   }
 
+
+  const lastPlayedMessageIdRef = useRef(null)
+
   const sendMessage = async (messageContent, emotion = null, conversationIdOverride = null) => {
     const convId = conversationIdOverride ?? currentConversation?.id
     console.log('[ChatPage] sendMessage called:', { messageContent, hasConversation: !!convId })
@@ -301,42 +304,35 @@ export default function ChatPage() {
 
       const data = await response.json()
 
-          if (response.ok) {
-            if (data.crisis_detected) {
-              setCrisisAlert(data.emergency_message)
-            } else {
-              // Ajouter les messages à la conversation + MAJ cache local
-              setMessages(prev => {
-                const next = [...prev, data.user_message, data.ai_message]
-                try {
-                  localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
-                } catch (e) {
-                  console.warn('Impossible d\'enregistrer le cache messages:', e)
-                }
-                return next
-              })
-              
-              // Mettre à jour le quota utilisateur
-              if (user) {
-                updateUser({ ...user, quota_remaining: data.quota_remaining })
-              }
-
-              // Appel audio AVANT le return avec délai pour garantir exécution
-              if (data.ai_message?.audio_path) {
-                setTimeout(() => {
-                  playAudio(data.ai_message.audio_path)
-                }, 300)
-              }
-
-              return data
+      if (response.ok) {
+        if (data.crisis_detected) {
+          setCrisisAlert(data.emergency_message)
+        } else {
+          // Ajouter les messages à la conversation + MAJ cache local
+          setMessages(prev => {
+            const next = [...prev, data.user_message, data.ai_message]
+            try {
+              localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+            } catch (e) {
+              console.warn('Impossible d\'enregistrer le cache messages:', e)
             }
-          } else if (response.status === 403) {
-            console.warn('[ChatPage] Quota épuisé (403)')
-            setQuotaWarning(true)
-          } else if (response.status === 401) {
-            console.warn('[ChatPage] Non connecté (401), redirection vers /login')
-            navigate('/login')
+            return next
+          })
+          
+          // Mettre à jour le quota utilisateur
+          if (user) {
+            updateUser({ ...user, quota_remaining: data.quota_remaining })
           }
+
+          return data
+        }
+      } else if (response.status === 403) {
+        console.warn('[ChatPage] Quota épuisé (403)')
+        setQuotaWarning(true)
+      } else if (response.status === 401) {
+        console.warn('[ChatPage] Non connecté (401), redirection vers /login')
+        navigate('/login')
+      }
     } catch (error) {
       console.error('Erreur lors de l\'envoi du message:', error)
     } finally {
@@ -345,6 +341,18 @@ export default function ChatPage() {
     
     return null
   }
+
+  // useEffect pour jouer l'audio quand un nouveau message IA est ajouté
+  useEffect(() => {
+    if (messages.length === 0) return
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage.is_user && lastMessage.audio_path) {
+      if (lastPlayedMessageIdRef.current !== lastMessage.id) {
+        lastPlayedMessageIdRef.current = lastMessage.id
+        playAudio(lastMessage.audio_path)
+      }
+    }
+  }, [messages])
 
   // Streaming: déclencher TTS sur la première phrase (0.25–0.5s après fin micro), puis lire le reste à la fin
   const sendMessageStream = async (messageContent, emotion = null, conversationIdOverride = null) => {
@@ -376,60 +384,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder()
       let sseBuffer = ''
       let fullText = ''
-      let firstSentenceSpoken = false
-      let firstSentenceLength = 0
       let fallbackTimer = null
-      let lastSpokenIndex = 0
-      // Démarrage dès arrivée du premier token (pas d'attente forcée)
-      const makeSnippet = (txt) => {
-        const t = (txt || '').trim()
-        if (t.length <= 0) return ''
-        // Prendre 80 premiers chars max, couper proprement sur espace/ponctuation si possible
-        const cutMax = 80
-        const slice = t.slice(0, cutMax)
-        const punctIdx = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('!'), slice.lastIndexOf('?'), slice.lastIndexOf('…'), slice.lastIndexOf(','))
-        const spaceIdx = slice.lastIndexOf(' ')
-        const cutIdx = punctIdx >= 10 ? punctIdx + 1 : (spaceIdx >= 10 ? spaceIdx : slice.length)
-        return slice.slice(0, cutIdx).trim()
-      }
-      const trySpeakImmediateFirst = () => {
-        if (firstSentenceSpoken) return
-        if (fullText.trim().length < 8) return
-        const snippet = makeSnippet(fullText)
-        if (snippet && snippet.length > 0) {
-          speakText(snippet)
-          firstSentenceSpoken = true
-          firstSentenceLength = snippet.length
-          lastSpokenIndex = snippet.length
-        }
-      }
-
-      const sentenceRegex = /[^.!?…]+[.!?…](?:\s|$)/g
-
-      const trySpeakNewSentences = () => {
-        const text = fullText
-        sentenceRegex.lastIndex = lastSpokenIndex
-        let match
-        while ((match = sentenceRegex.exec(text))) {
-          const raw = match[0]
-          const sentence = raw.trim()
-          const endIdx = match.index + raw.length
-          if (endIdx <= lastSpokenIndex) continue
-
-          if (!firstSentenceSpoken) {
-            firstSentenceLength = endIdx
-            speakText(sentence)
-            firstSentenceSpoken = true
-            if (fallbackTimer) {
-              clearTimeout(fallbackTimer)
-              fallbackTimer = null
-            }
-          } else {
-            speakText(sentence)
-          }
-          lastSpokenIndex = endIdx
-        }
-      }
 
       while (true) {
         const { done, value } = await reader.read()
@@ -453,8 +408,6 @@ export default function ChatPage() {
 
           if (data.type === 'delta' && data.content) {
             fullText += data.content
-            trySpeakImmediateFirst()
-            trySpeakNewSentences()
           } else if (data.type === 'done') {
             if (fallbackTimer) {
               clearTimeout(fallbackTimer)
@@ -474,11 +427,14 @@ export default function ChatPage() {
               console.warn('[ChatPage] MAJ UI post-stream échouée', e)
             }
 
-            // Lire le reste du texte non encore joué
-            const remaining = fullText.slice(lastSpokenIndex).trim()
-            if (remaining) {
-              speakText(remaining)
-              lastSpokenIndex = fullText.length
+            // Jouer uniquement audio_path de la réponse IA, pas de TTS texte
+            if (data.ai_message?.audio_path) {
+              if (lastPlayedMessageIdRef.current !== data.ai_message.id) {
+                lastPlayedMessageIdRef.current = data.ai_message.id
+                setTimeout(() => {
+                  playAudio(data.ai_message.audio_path)
+                }, 300)
+              }
             }
           }
         }
@@ -492,8 +448,10 @@ export default function ChatPage() {
     return null
   }
 
+  // Désactiver speakText intermédiaire qui joue du texte (TTS) car cause arrêt audio rapide sur Safari
+  // On joue uniquement audio_path mp3 via useEffect et setTimeout dans sendMessage et sendMessageStream
   const speakText = async (text) => {
-    await playAudio(text)
+    // Ne rien faire pour désactiver la lecture TTS texte
   }
 
   const handleVoiceRecording = async () => {
