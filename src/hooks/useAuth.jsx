@@ -13,29 +13,13 @@ export function AuthProvider({ children }) {
 
   const checkAuthStatus = async () => {
     try {
-      // Récupérer le token JWT depuis localStorage
-      const token = localStorage.getItem('nonotalk_token')
-      
-      const headers = {
-        'Content-Type': 'application/json'
-      }
-      
-      // Ajouter le token JWT si disponible (pour Safari iOS)
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-      
       const response = await fetch(`${API_URL}/auth/me`, {
-        credentials: 'include',  // Garder pour compatibilité desktop
-        headers
+        credentials: 'include'
       })
       
       if (response.ok) {
         const data = await response.json()
         setUser(data.user)
-      } else {
-        // Token invalide ou expiré, nettoyer localStorage
-        localStorage.removeItem('nonotalk_token')
       }
     } catch (error) {
       console.error('Erreur lors de la vérification de l\'authentification:', error)
@@ -58,11 +42,6 @@ export function AuthProvider({ children }) {
       const data = await response.json()
 
       if (response.ok) {
-        // Stocker le token JWT dans localStorage (pour Safari iOS)
-        if (data.token) {
-          localStorage.setItem('nonotalk_token', data.token)
-          console.log('[useAuth] Token JWT stocké dans localStorage')
-        }
         setUser(data.user)
         return { success: true, user: data.user }
       } else {
@@ -87,11 +66,6 @@ export function AuthProvider({ children }) {
       const data = await response.json()
 
       if (response.ok) {
-        // Stocker le token JWT dans localStorage (pour Safari iOS)
-        if (data.token) {
-          localStorage.setItem('nonotalk_token', data.token)
-          console.log('[useAuth] Token JWT stocké dans localStorage')
-        }
         setUser(data.user)
         return { success: true, user: data.user, bonus_quota: data.bonus_quota }
       } else {
@@ -111,8 +85,6 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error)
     } finally {
-      // Nettoyer le token JWT
-      localStorage.removeItem('nonotalk_token')
       setUser(null)
     }
   }

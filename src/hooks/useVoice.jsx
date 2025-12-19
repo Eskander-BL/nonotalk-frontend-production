@@ -1,15 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { API_URL, getAuthFetchOptions } from '../lib/api'
+import { API_URL } from '../lib/api'
 
 export function useVoice() {
   const [isRecording, setIsRecording] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [audioUnlocked, setAudioUnlocked] = useState(false)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
   const silenceTimeoutRef = useRef(null)
   const audioContextRef = useRef(null)
-  const audioElementRef = useRef(null)
   const activeUtterancesRef = useRef(0)
   const endGraceTimeoutRef = useRef(null)
   const speechRecRef = useRef(null)
@@ -43,39 +41,11 @@ export function useVoice() {
     } catch {}
   }, [])
 
-  // Déverrouiller l'audio au premier clic utilisateur (contourne Autoplay Policy sur mobile)
-  const unlockAudio = useCallback(() => {
-    if (audioUnlocked) return
-    // Guard strict : ne pas déverrouiller si audio est en train de jouer
-    if (audioElementRef.current && !audioElementRef.current.paused) {
-      console.log('[useVoice] unlockAudio skipped: audio is playing')
-      return
-    }
-    try {
-      // Créer un AudioContext (déverrouille l'audio sur mobile)
-      if (!audioContextRef.current && typeof window !== 'undefined' && window.AudioContext) {
-        audioContextRef.current = new window.AudioContext()
-      }
-      // Créer un élément audio silencieux et le jouer pour déverrouiller
-      if (!audioElementRef.current) {
-        audioElementRef.current = new Audio()
-        audioElementRef.current.volume = 0
-        audioElementRef.current.play().catch(() => {})
-      }
-      console.log("[AUDIO] unlockAudio called", audioUnlocked, audioContextRef.current?.state); setAudioUnlocked(true)
-      console.log('[useVoice] Audio déverrouillé')
-    } catch (e) {
-      console.error('[useVoice] Erreur déverrouillage audio:', e)
-    }
-  }, [audioUnlocked])
-
   const startRecording = useCallback(async (onTranscriptionComplete) => {
     console.log('[useVoice] startRecording()')
-    // Déverrouiller l'audio au premier clic
-    unlockAudio()
     try {
-      // Mode STT via MediaRecorder + backend (plus fiable sur tous les devices)
-      const SpeechRec = false // Désactivé pour utiliser MediaRecorder partout
+      // Mode STT ultra faible latence via Web Speech API si disponible
+      const SpeechRec = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
       if (SpeechRec) {
         const rec = new SpeechRec()
         speechRecRef.current = rec
@@ -116,20 +86,16 @@ export function useVoice() {
         
         rec.onspeechend = () => {
           // Fin de parole détectée rapidement par l'API
-          console.log('[useVoice] onspeechend déclenché')
           try {
             window.dispatchEvent(new CustomEvent('voice:speech_end'))
           } catch {}
           const transcript = (latestPartialRef.current || '').trim()
-          console.log('[useVoice] Transcript capturé:', transcript)
           if (transcript && !didSendRef.current) {
             didSendRef.current = true
-            console.log('[useVoice] Envoi du transcript via événement')
             try {
               window.dispatchEvent(new CustomEvent('voice:transcription', { detail: { transcript } }))
             } catch {}
             if (onTranscriptionComplete) {
-              console.log('[useVoice] Appel de onTranscriptionComplete')
               setTimeout(() => onTranscriptionComplete(transcript), 0)
             }
           }
@@ -137,25 +103,18 @@ export function useVoice() {
         }
 
         rec.onend = () => {
-          console.log('[useVoice] onend déclenché')
           setIsRecording(false)
           if (!didSendRef.current) {
             const transcript = (latestPartialRef.current || '').trim()
-            console.log('[useVoice] onend - Transcript:', transcript)
             if (transcript) {
               didSendRef.current = true
-              console.log('[useVoice] onend - Envoi du transcript')
               try {
                 window.dispatchEvent(new CustomEvent('voice:transcription', { detail: { transcript } }))
               } catch {}
               if (onTranscriptionComplete) {
                 setTimeout(() => onTranscriptionComplete(transcript), 0)
               }
-            } else {
-              console.warn('[useVoice] onend - Transcript vide !')
             }
-          } else {
-            console.log('[useVoice] onend - Transcript déjà envoyé')
           }
           speechRecRef.current = null
         }
@@ -175,10 +134,9 @@ export function useVoice() {
       })
       // Choisir un mimeType compatible (Safari iOS supporte parfois audio/mp4, Chrome audio/webm;codecs=opus)
       const preferredTypes = [
-        'audio/wav',              // Safari iOS supporte WAV
-        'audio/webm;codecs=opus', // Chrome desktop
-        'audio/webm',             // Fallback webm
-        'audio/mp4'               // Fallback mp4
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4'
       ]
       let chosenType = ''
       if (typeof window !== 'undefined' && window.MediaRecorder && typeof MediaRecorder.isTypeSupported === 'function') {
@@ -203,7 +161,7 @@ export function useVoice() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
       let lastSoundTime = Date.now()
       const SILENCE_THRESHOLD = 30
-      const SILENCE_DURATION = 2000 // ~2.0s de silence (laisser le temps de parler)
+      const SILENCE_DURATION = 1000 // ~1.0s de silence (coupure plus réactive)
       let isCheckingActive = true
 
       const checkSilence = () => {
@@ -245,7 +203,7 @@ export function useVoice() {
           window.dispatchEvent(new CustomEvent('voice:speech_end'))
         } catch {}
 
-        const currentType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || 'audio/wav'
+        const currentType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || 'audio/webm'
         const audioBlob = new Blob(audioChunksRef.current, { type: currentType })
         console.log('[useVoice] audioBlob size=', audioBlob.size)
         const transcript = await transcribeAudio(audioBlob)
@@ -277,24 +235,9 @@ export function useVoice() {
       mediaRecorder.start()
       setIsRecording(true)
       
-      // Timeout de sécurité : arrêt automatique après 30s (laisser le temps de parler)
-      const maxRecordingTimeout = setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          console.log('[useVoice] Timeout 30s atteint, arrêt forcé')
-          mediaRecorderRef.current.stop()
-        }
-      }, 30000)
-      
       // Démarrer immédiatement la détection de silence
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         requestAnimationFrame(checkSilence)
-      }
-      
-      // Nettoyer le timeout dans onstop
-      const originalOnStop = mediaRecorder.onstop
-      mediaRecorder.onstop = (e) => {
-        clearTimeout(maxRecordingTimeout)
-        if (originalOnStop) originalOnStop(e)
       }
       
     } catch (error) {
@@ -330,14 +273,11 @@ export function useVoice() {
       formData.append('audio', audioBlob, `recording.${ext}`)
 
       console.log('[useVoice] POST /api/speech-to-text ...')
-      // Pour FormData, ne pas inclure Content-Type (auto-détecté)
-      const authOptions = getAuthFetchOptions({
+      const response = await fetch(`${API_URL}/speech-to-text`, {
         method: 'POST',
-        body: formData
+        credentials: 'include',
+        body: formData,
       })
-      delete authOptions.headers['Content-Type']  // Laisser le navigateur définir le boundary
-      
-      const response = await fetch(`${API_URL}/speech-to-text`, authOptions)
 
       if (response.ok) {
         const data = await response.json()
@@ -354,117 +294,60 @@ export function useVoice() {
     }
   }
 
-  const isSpeakingRef = useRef(false)
-
-  const playAudio = useCallback(async (audioUrl) => {
+  const playAudio = useCallback(async (text) => {
     try {
-      console.log('[useVoice] playAudio called with URL:', audioUrl)
-      // For AI responses, only play backend MP3 audio via HTMLAudioElement
-      // Disable SpeechSynthesisUtterance usage entirely for AI responses
-
-      // Pause all videos before playing AI audio to prevent audio interruption (Safari/mobile fix)
-      const videos = document.querySelectorAll('video')
-      videos.forEach(video => {
-        if (!video.paused) {
-          console.log('[useVoice] Pausing video before playing audio')
-          video.pause()
-        }
-      })
-
-      // Définir le flag isSpeaking à true au début de la lecture audio
-      isSpeakingRef.current = true
-
-      // Déverrouiller l'audio s'il ne l'est pas déjà
-      if (!audioUnlocked) {
-        console.log('[useVoice] playAudio calls unlockAudio')
-        unlockAudio()
+      // Annuler un éventuel timer de fin gracieuse si une nouvelle phrase arrive
+      if (endGraceTimeoutRef.current) {
+        clearTimeout(endGraceTimeoutRef.current)
+        endGraceTimeoutRef.current = null
       }
 
-      // Utiliser un élément audio réutilisable
-      if (!audioElementRef.current) {
-        console.log('[useVoice] Creating new Audio element')
-        audioElementRef.current = new Audio()
-        audioElementRef.current.volume = 1.0
-      } else {
-        // Stopper la lecture en cours et nettoyer les événements
-        console.log('[useVoice] Stopping current audio playback before new play')
-        audioElementRef.current.pause()
-        audioElementRef.current.currentTime = 0
-        audioElementRef.current.onplay = null
-        audioElementRef.current.onended = null
-        audioElementRef.current.onerror = null
-      }
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'fr-FR'
+      utterance.rate = 0.9
+      // Choisir une voix FR si disponible pour éviter le délai de sélection implicite
+      try {
+        const list = (typeof window !== 'undefined' && window.speechSynthesis?.getVoices?.()) || voicesRef.current || []
+        const frVoice = Array.isArray(list) ? (list.find(v => /fr/i.test(v.lang)) || list.find(v => /fr|french/i.test(v.name)) || list[0]) : null
+        if (frVoice) utterance.voice = frVoice
+      } catch {}
 
-      audioElementRef.current.src = audioUrl
-
-      audioElementRef.current.onplay = () => {
-        console.log('[useVoice] audioElement onplay event')
+      utterance.onstart = () => {
+        activeUtterancesRef.current += 1
         setIsPlaying(true)
       }
-
       const handleDone = () => {
-        console.log('[useVoice] audioElement playback ended or error')
-        setIsPlaying(false)
-        // Réinitialiser le flag isSpeaking à false à la fin de la lecture
-        isSpeakingRef.current = false
+        activeUtterancesRef.current = Math.max(0, activeUtterancesRef.current - 1)
+        // Laisser une petite marge pour enchaîner la prochaine phrase sans couper la vidéo
+        if (activeUtterancesRef.current === 0) {
+          endGraceTimeoutRef.current = setTimeout(() => {
+            if (activeUtterancesRef.current === 0) {
+              setIsPlaying(false)
+            }
+          }, 200)
+        }
       }
+      utterance.onend = handleDone
+      utterance.onerror = handleDone
 
-      audioElementRef.current.onended = handleDone
-      audioElementRef.current.onerror = handleDone
-
-      const playPromise = audioElementRef.current.play()
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          console.log('[useVoice] playPromise rejected')
-          handleDone()
-        })
-      }
+      speechSynthesis.speak(utterance)
     } catch (error) {
       console.error('Erreur lors de la lecture audio:', error)
       setIsPlaying(false)
-      isSpeakingRef.current = false
     }
-  }, [audioUnlocked, unlockAudio])
-
-  const startRecording = useCallback(async () => {
-    // Bloquer le démarrage de l'enregistrement si isSpeaking est true
-    if (isSpeakingRef.current) {
-      console.log('[useVoice] startRecording blocked: isSpeaking is true')
-      return
-    }
-    // ... existing startRecording logic here ...
   }, [])
-  
+
   const stopAudio = useCallback(() => {
-    console.log('[useVoice] stopAudio called')
     try {
       speechSynthesis.cancel()
     } catch {}
-
-    // Guard: stopAudio ne doit PAS s'exécuter tant que audio est en train de jouer (non paused)
-    if (audioElementRef.current && !audioElementRef.current.paused) {
-      console.log('[useVoice] stopAudio skipped: audio is playing')
-      return
-    }
-
     activeUtterancesRef.current = 0
     if (endGraceTimeoutRef.current) {
       clearTimeout(endGraceTimeoutRef.current)
       endGraceTimeoutRef.current = null
     }
-    if (audioElementRef.current) {
-      console.log('[useVoice] Pausing and resetting audioElement in stopAudio')
-      if (!audioElementRef.current.paused) {
-        audioElementRef.current.pause()
-        audioElementRef.current.currentTime = 0
-        audioElementRef.current.src = ''
-      }
-    }
     setIsPlaying(false)
   }, [])
-
-  // Add debug logs to unlockAudio
-  // Removed duplicate declarations to fix redeclaration errors
 
   return {
     isRecording,

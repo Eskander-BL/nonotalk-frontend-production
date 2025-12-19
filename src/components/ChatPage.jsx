@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import './ChatPage.css'
 import { useIsMobile } from '../hooks/use-mobile'
-import { API_URL, getAuthFetchOptions } from '../lib/api'
+import { API_URL } from '../lib/api'
 
 export default function ChatPage() {
   const { user, logout, updateUser } = useAuth()
@@ -44,12 +44,8 @@ export default function ChatPage() {
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-
-  // Refs for audio playback control
-  const lastPlayedMessageIdRef = useRef(null)
-  const isSpeakingRef = useRef(false)
-
-  // Functions for logout
+  
+  // Fonctions de gestion de la déconnexion
   const cancelLogout = () => {
     setShowLogoutConfirm(false)
   }
@@ -64,49 +60,25 @@ export default function ChatPage() {
     setShowLogoutConfirm(true)
   }
 
-  // Function to play audio with ElevenLabs TTS
-  const playElevenLabsAudio = async (text) => {
-    try {
-      const response = await fetch(`${API_URL}/tts/elevenlabs`, getAuthFetchOptions({
-        method: 'POST',
-        body: JSON.stringify({ text })
-      }))
-      
-      if (response.ok) {
-        const audioBlob = await response.blob()
-        const audioUrl = URL.createObjectURL(audioBlob)
-        console.log('[ChatPage] playElevenLabsAudio received audioUrl:', audioUrl)
-        await playAudio(audioUrl)
-        URL.revokeObjectURL(audioUrl)
-      } else {
-        console.error('Erreur ElevenLabs, fallback sur Web Speech')
-        playAudio(text)
-      }
-    } catch (error) {
-      console.error('Erreur ElevenLabs:', error)
-      playAudio(text)
-    }
-  }
-
-  // Other refs
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const lastTranscriptRef = useRef(null)
   const historyRef = useRef(null)
   const videoRef = useRef(null)
-  const lastMicEndRef = useRef(null)
-  const avatarContainerRef = useRef(null)
+  const lastMicEndRef = useRef(0)
 
   useEffect(() => {
     initializeApp()
   }, [])
 
+  // Définir l'état initial de la sidebar selon le device
   useEffect(() => {
     if (isMobile !== undefined) {
       setShowSidebar(!isMobile)
     }
   }, [isMobile])
 
+  // Filet de sécurité: écouter l'évènement global dispatché par useVoice()
   useEffect(() => {
     const onTranscription = async (e) => {
       try {
@@ -123,6 +95,7 @@ export default function ChatPage() {
         }
         lastTranscriptRef.current = clean
 
+        // S'assurer d'avoir un convId
         let targetConvId = currentConversation?.id
         if (!targetConvId) {
           const conv = await createMainConversation()
@@ -133,7 +106,7 @@ export default function ChatPage() {
           return
         }
 
-        await sendMessage(clean, null, targetConvId)
+        await sendMessageStream(clean, null, targetConvId)
       } catch (err) {
         console.error('[ChatPage] Erreur handler event voice:transcription:', err)
       }
@@ -143,16 +116,14 @@ export default function ChatPage() {
     return () => window.removeEventListener('voice:transcription', onTranscription)
   }, [currentConversation])
 
+  // Auto scroll en bas de l'historique quand de nouveaux messages arrivent
   useEffect(() => {
     if (historyRef.current) {
-      if (isMobile) {
-        historyRef.current.scrollTop = 0
-      } else {
-        historyRef.current.scrollTop = historyRef.current.scrollHeight
-      }
+      historyRef.current.scrollTop = historyRef.current.scrollHeight
     }
-  }, [messages, showSidebar, isMobile])
+  }, [messages, showSidebar])
 
+  // Contrôle lecture vidéo avatar selon isPlaying
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
@@ -170,20 +141,26 @@ export default function ChatPage() {
     } catch {}
   }, [isPlaying])
 
+  // Enregistrer l'instant de fin de parole pour temporiser le démarrage du TTS (250–500ms après fermeture micro)
   useEffect(() => {
     const onSpeechEnd = () => { lastMicEndRef.current = Date.now() }
     window.addEventListener('voice:speech_end', onSpeechEnd)
     return () => window.removeEventListener('voice:speech_end', onSpeechEnd)
   }, [])
 
+
   const initializeApp = async () => {
     await checkQuota()
+    // Charger les conversations existantes (et leurs 10 derniers messages)
     await loadConversations()
   }
 
   const checkQuota = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/check-quota`, getAuthFetchOptions())
+      const response = await fetch(`${API_URL}/auth/check-quota`, {
+        credentials: 'include'
+      })
+      
       if (response.ok) {
         const data = await response.json()
         if (data.quota_remaining <= 2) {
@@ -197,32 +174,37 @@ export default function ChatPage() {
 
   const loadConversations = async () => {
     try {
-      const response = await fetch(`${API_URL}/chat/conversations`, getAuthFetchOptions())
+      const response = await fetch(`${API_URL}/chat/conversations`, {
+        credentials: 'include'
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setConversations(data.conversations)
+        // Mettre en cache local les 10 dernières conversations
         try {
           localStorage.setItem('recentConversations', JSON.stringify(data.conversations.slice(0, 10)))
         } catch (e) {
           console.warn('Impossible d\'enregistrer le cache conversations:', e)
         }
+        
+        // Charger la première conversation ou en créer une nouvelle
         if (data.conversations.length > 0) {
           selectConversation(data.conversations[0])
         } else {
           await createMainConversation()
         }
-        if (isMobile) {
-          setShowSidebar(true)
-        }
       }
     } catch (error) {
       console.error('Erreur lors du chargement des conversations:', error)
+      // Fallback offline: essayer le cache local des conversations + messages
       try {
         const cached = localStorage.getItem('recentConversations')
         if (cached) {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed) && parsed.length > 0) {
             setConversations(parsed)
+            // sélectionner la première pour charger ses messages en cache
             selectConversation(parsed[0])
           }
         }
@@ -234,10 +216,15 @@ export default function ChatPage() {
 
   const createMainConversation = async () => {
     try {
-      const response = await fetch(`${API_URL}/chat/conversations`, getAuthFetchOptions({
+      const response = await fetch(`${API_URL}/chat/conversations`, {
         method: 'POST',
-        body: JSON.stringify({ title: 'Conversation avec Nono' })
-      }))
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ title: 'Conversation avec Nono' }),
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setCurrentConversation(data.conversation)
@@ -252,6 +239,8 @@ export default function ChatPage() {
 
   const selectConversation = async (conversation) => {
     setCurrentConversation(conversation)
+
+    // Pré-remplir avec le cache local si disponible
     try {
       const cacheKey = `recentMessages:${conversation.id}`
       const cached = localStorage.getItem(cacheKey)
@@ -264,18 +253,24 @@ export default function ChatPage() {
     } catch (e) {
       console.warn('Cache messages invalide:', e)
     }
+    
     try {
-      const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, getAuthFetchOptions())
+      const response = await fetch(`${API_URL}/chat/conversations/${conversation.id}/messages?limit=10`, {
+        credentials: 'include'
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setMessages(data.messages)
+        // Mettre en cache local les 10 derniers messages
         try {
           localStorage.setItem(`recentMessages:${conversation.id}`, JSON.stringify(data.messages.slice(-10)))
         } catch (e) {
           console.warn('Impossible d\'enregistrer le cache messages:', e)
         }
+        // Ouvrir l’historique sur desktop, fermé par défaut sur mobile
         if (isMobile !== undefined) {
-          setShowSidebar(true)
+          setShowSidebar(!isMobile)
         }
       }
     } catch (error) {
@@ -292,27 +287,27 @@ export default function ChatPage() {
 
     try {
       console.log('[ChatPage] POST /api/chat/conversations/' + convId + '/send')
-      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, getAuthFetchOptions({
+      const response = await fetch(`${API_URL}/chat/conversations/${convId}/send`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify({ 
           message: messageContent,
           emotion: emotion 
-        })
-      }))
+        }),
+      })
 
       const data = await response.json()
-      console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
-      console.log('[ChatPage] AI message content:', data.ai_message?.content)
 
       if (response.ok) {
         if (data.crisis_detected) {
           setCrisisAlert(data.emergency_message)
         } else {
-          console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
+          // Ajouter les messages à la conversation + MAJ cache local
           setMessages(prev => {
             const next = [...prev, data.user_message, data.ai_message]
-            console.log('[ChatPage] Messages after update:', next.length, 'total messages')
-            console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
             try {
               localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
             } catch (e) {
@@ -320,18 +315,13 @@ export default function ChatPage() {
             }
             return next
           })
+          
+          // Mettre à jour le quota utilisateur
           if (user) {
             updateUser({ ...user, quota_remaining: data.quota_remaining })
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
-          if (data.ai_message?.audio_path) {
-            if (lastPlayedMessageIdRef.current !== data.ai_message.id && !isPlaying) {
-              lastPlayedMessageIdRef.current = data.ai_message.id
-              playAudio(data.ai_message.audio_path)
-            } else {
-              console.log('[ChatPage] Audio already playing or message already played, skipping playAudio')
-            }
-          }
+
           return data
         }
       } else if (response.status === 403) {
@@ -346,15 +336,158 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false)
     }
+    
+    return null
+  }
+
+  // Streaming: déclencher TTS sur la première phrase (0.25–0.5s après fin micro), puis lire le reste à la fin
+  const sendMessageStream = async (messageContent, emotion = null, conversationIdOverride = null) => {
+    const convId = conversationIdOverride ?? currentConversation?.id
+    if (!messageContent?.trim() || !convId) return null
+
+    setIsLoading(true)
+    try {
+      const streamUrl = `${API_URL}/chat/conversations/${convId}/send-stream`
+
+      const res = await fetch(streamUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ message: messageContent, emotion })
+      })
+
+      if (!res.ok || !res.body) {
+        console.warn('[ChatPage] Streaming non dispo, fallback sendMessage')
+        return await sendMessage(messageContent, emotion, convId)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+      let fullText = ''
+      let firstSentenceSpoken = false
+      let firstSentenceLength = 0
+      let fallbackTimer = null
+      let lastSpokenIndex = 0
+      // Démarrage dès arrivée du premier token (pas d'attente forcée)
+      const makeSnippet = (txt) => {
+        const t = (txt || '').trim()
+        if (t.length <= 0) return ''
+        // Prendre 80 premiers chars max, couper proprement sur espace/ponctuation si possible
+        const cutMax = 80
+        const slice = t.slice(0, cutMax)
+        const punctIdx = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('!'), slice.lastIndexOf('?'), slice.lastIndexOf('…'), slice.lastIndexOf(','))
+        const spaceIdx = slice.lastIndexOf(' ')
+        const cutIdx = punctIdx >= 10 ? punctIdx + 1 : (spaceIdx >= 10 ? spaceIdx : slice.length)
+        return slice.slice(0, cutIdx).trim()
+      }
+      const trySpeakImmediateFirst = () => {
+        if (firstSentenceSpoken) return
+        if (fullText.trim().length < 8) return
+        const snippet = makeSnippet(fullText)
+        if (snippet && snippet.length > 0) {
+          speakText(snippet)
+          firstSentenceSpoken = true
+          firstSentenceLength = snippet.length
+          lastSpokenIndex = snippet.length
+        }
+      }
+
+      const sentenceRegex = /[^.!?…]+[.!?…](?:\s|$)/g
+
+      const trySpeakNewSentences = () => {
+        const text = fullText
+        sentenceRegex.lastIndex = lastSpokenIndex
+        let match
+        while ((match = sentenceRegex.exec(text))) {
+          const raw = match[0]
+          const sentence = raw.trim()
+          const endIdx = match.index + raw.length
+          if (endIdx <= lastSpokenIndex) continue
+
+          if (!firstSentenceSpoken) {
+            firstSentenceLength = endIdx
+            speakText(sentence)
+            firstSentenceSpoken = true
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer)
+              fallbackTimer = null
+            }
+          } else {
+            speakText(sentence)
+          }
+          lastSpokenIndex = endIdx
+        }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        sseBuffer += chunk
+
+        const events = sseBuffer.split('\n\n')
+        sseBuffer = events.pop() || ''
+        for (const evt of events) {
+          const line = evt.trim()
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload) continue
+          let data
+          try {
+            data = JSON.parse(payload)
+          } catch {
+            continue
+          }
+
+          if (data.type === 'delta' && data.content) {
+            fullText += data.content
+            trySpeakImmediateFirst()
+            trySpeakNewSentences()
+          } else if (data.type === 'done') {
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer)
+              fallbackTimer = null
+            }
+            // MAJ UI + quota
+            try {
+              setMessages(prev => {
+                const next = [...prev, data.user_message, data.ai_message]
+                try {
+                  localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+                } catch {}
+                return next
+              })
+              if (user) updateUser({ ...user, quota_remaining: data.quota_remaining })
+            } catch (e) {
+              console.warn('[ChatPage] MAJ UI post-stream échouée', e)
+            }
+
+            // Lire le reste du texte non encore joué
+            const remaining = fullText.slice(lastSpokenIndex).trim()
+            if (remaining) {
+              speakText(remaining)
+              lastSpokenIndex = fullText.length
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ChatPage] Erreur streaming:', e)
+      return await sendMessage(messageContent, emotion, conversationIdOverride)
+    } finally {
+      setIsLoading(false)
+    }
     return null
   }
 
   const speakText = async (text) => {
-    if (useElevenLabs) {
-      await playElevenLabsAudio(text)
-    } else {
-      await playAudio(text)
-    }
+    await playAudio(text)
   }
 
   const handleVoiceRecording = async () => {
@@ -362,11 +495,14 @@ export default function ChatPage() {
     if (isRecording) {
       stopRecording()
     } else {
+      // Créer la conversation principale si nécessaire
       let convId = currentConversation?.id
       if (!convId) {
         const conv = await createMainConversation()
         convId = conv?.id
       }
+      
+      // Démarrer l'enregistrement avec callback pour traiter le transcript
       console.log('[ChatPage] Appel startRecording avec callback')
       await startRecording(async (transcript) => {
         try {
@@ -377,7 +513,9 @@ export default function ChatPage() {
             return
           }
           lastTranscriptRef.current = cleanTranscript
+
           if (cleanTranscript) {
+            // Envoyer automatiquement le message transcrit
             console.log('[ChatPage] Envoi transcript au backend via sendMessage...')
             let targetConvId = convId ?? currentConversation?.id
             if (!targetConvId) {
@@ -388,7 +526,7 @@ export default function ChatPage() {
               console.error('[ChatPage] Impossible de déterminer une conversation id')
               return
             }
-            await sendMessage(cleanTranscript, null, targetConvId)
+            await sendMessageStream(cleanTranscript, null, targetConvId)
           } else {
             console.warn('[ChatPage] Transcript vide/falsy, envoi annulé')
           }
@@ -402,6 +540,8 @@ export default function ChatPage() {
   const handleImageUpload = async (event) => {
     const file = event.target.files[0]
     if (!file) return
+
+    // S'assurer qu'une conversation existe (création lazy si nécessaire)
     let convId = currentConversation?.id
     if (!convId) {
       const conv = await createMainConversation()
@@ -411,17 +551,21 @@ export default function ChatPage() {
         return
       }
     }
+
     const formData = new FormData()
     formData.append('image', file)
+
     setIsLoading(true)
+
     try {
-      const authOptions = getAuthFetchOptions({
+      const response = await fetch(`${API_URL}/chat/conversations/${convId}/upload-image`, {
         method: 'POST',
-        body: formData
+        credentials: 'include',
+        body: formData,
       })
-      delete authOptions.headers['Content-Type']
-      const response = await fetch(`${API_URL}/chat/conversations/${convId}/upload-image`, authOptions)
+
       const data = await response.json()
+
       if (response.ok) {
         setMessages(prev => {
           const next = [...prev, data.image_message, data.ai_message]
@@ -432,9 +576,11 @@ export default function ChatPage() {
           }
           return next
         })
+        
         if (user) {
           updateUser({ ...user, quota_remaining: data.quota_remaining })
         }
+
         speakText(data.ai_message.content)
       }
     } catch (error) {
@@ -446,9 +592,10 @@ export default function ChatPage() {
 
   const acknowledgeCrisis = async () => {
     try {
-      await fetch(`${API_URL}/chat/crisis/acknowledge`, getAuthFetchOptions({
-        method: 'POST'
-      }))
+      await fetch(`${API_URL}/chat/crisis/acknowledge`, {
+        method: 'POST',
+        credentials: 'include'
+      })
       setCrisisAlert(null)
     } catch (error) {
       console.error('Erreur lors de l\'acknowledgement de crise:', error)
@@ -469,10 +616,12 @@ export default function ChatPage() {
     setInviteError('')
     setInviteSuccess('')
     try {
-      const res = await fetch(`${API_URL}/invite`, getAuthFetchOptions({
+      const res = await fetch(`${API_URL}/invite`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email: inviteEmail, invited_by: user?.username })
-      }))
+      })
       const data = await res.json()
       if (res.ok) {
         setInviteSuccess("🎉 Invitation envoyée ! Tu recevras +5 échanges dès que ton ami créera un compte.")
@@ -596,7 +745,7 @@ export default function ChatPage() {
 
 
         {/* Interface principale - Avatar fixe au centre sans scrollbar */}
-        <div ref={avatarContainerRef} className="flex-1 flex flex-col items-center justify-start p-4 pt-6 overflow-hidden pb-24 md:pb-0 md:justify-center md:pt-0">
+        <div className="flex-1 flex flex-col items-center justify-start p-4 pt-6 overflow-hidden pb-24 md:pb-0 md:justify-center md:pt-0">
           <div className={`w-[178px] h-[178px] md:w-[210px] md:h-[210px] rounded-full bg-gradient-to-br from-purple-400 to-blue-400 flex items-center justify-center shadow-lg transition-all duration-300 ${
             isPlaying ? 'talking' : ''
           }`}>
@@ -619,7 +768,7 @@ export default function ChatPage() {
               />
             </div>
           </div>
-          <p className="text-center text-gray-600 text-sm md:text-lg font-medium px-4 mt-1 md:mt-3">
+          <p className="text-center text-gray-600 text-sm md:text-lg font-medium px-4 mt-2 md:mt-4">
             Je suis ton compagnon bienveillant, parle-moi librement 💜
           </p>
         </div>
@@ -775,5 +924,3 @@ export default function ChatPage() {
     </div>
   )
 }
-</final_file_content>
-</attempt_completion>
