@@ -198,7 +198,7 @@ export function useVoice() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
       let lastSoundTime = Date.now()
       const SILENCE_THRESHOLD = 30
-      const SILENCE_DURATION = 800 // ~0.8s de silence pour détection rapide et naturelle (comme ChatGPT Voice)
+      const SILENCE_DURATION = 1200 // ~1.2s de silence pour détection robuste sur mobile et desktop
       let isCheckingActive = true
 
       const checkSilence = () => {
