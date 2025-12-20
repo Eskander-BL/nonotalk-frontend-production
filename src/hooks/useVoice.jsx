@@ -377,10 +377,18 @@ export function useVoice() {
         // Forcer l'URL complète du backend si c'est une URL relative
         let fullAudioUrl = audioUrl
         if (audioUrl.startsWith('/')) {
-          fullAudioUrl = `${API_URL}${audioUrl}`
+          // API_URL contient déjà '/api', donc si audioUrl commence par '/api/', on doit l'enlever
+          if (audioUrl.startsWith('/api/')) {
+            // Enlever le '/api' de audioUrl pour éviter /api/api
+            const audioPath = audioUrl.substring(4)  // Enlever '/api'
+            fullAudioUrl = `${API_URL}${audioPath}`
+          } else {
+            fullAudioUrl = `${API_URL}${audioUrl}`
+          }
         }
         
         console.log('[useVoice] Loading audio from:', fullAudioUrl)
+        console.log('[useVoice] API_URL:', API_URL, 'audioUrl:', audioUrl)
         audio.src = fullAudioUrl
         audio.volume = 1.0
         
