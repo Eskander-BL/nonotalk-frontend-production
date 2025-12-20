@@ -360,11 +360,6 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
-          // Appel audio: si audio_path existe => appeler playAudio() immediatement
-          if (data.ai_message?.audio_path) {
-            playAudio(data.ai_message.audio_path)
-          }
-
           return data
         }
       } else if (response.status === 403) {
@@ -394,6 +389,7 @@ export default function ChatPage() {
   }
 
   const handleVoiceRecording = async () => {
+    if (isLoading) return
     if (isRecording) {
       stopRecording()
     } else {
@@ -680,7 +676,7 @@ export default function ChatPage() {
         <div className="flex items-center justify-center gap-4">
           <Button
             onClick={handleVoiceRecording}
-            disabled={isPlaying}
+            disabled={isLoading}
             className={`w-16 h-16 rounded-full opacity-100 cursor-pointer ${
               isRecording
                 ? 'bg-red-500 hover:bg-red-600 recording-ring'
