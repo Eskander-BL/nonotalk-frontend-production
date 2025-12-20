@@ -198,7 +198,7 @@ export function useVoice() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
       let lastSoundTime = Date.now()
       const SILENCE_THRESHOLD = 30
-      const SILENCE_DURATION = 2000 // ~2.0s de silence (laisser le temps de parler)
+      const SILENCE_DURATION = 800 // ~0.8s de silence pour détection rapide et naturelle (comme ChatGPT Voice)
       let isCheckingActive = true
 
       const checkSilence = () => {
@@ -233,7 +233,8 @@ export function useVoice() {
       mediaRecorder.onstop = async () => {
         isCheckingActive = false
         setIsRecording(false)
-        console.log('[useVoice] onstop: chunks=', audioChunksRef.current.length)
+        const t1 = Date.now()
+        console.log('[useVoice] onstop: chunks=', audioChunksRef.current.length, 'time=', t1)
 
         // Évènement immédiat à la fin de la parole pour déclencher une réponse vocale instantanée
         try {
@@ -243,8 +244,10 @@ export function useVoice() {
         const currentType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || 'audio/wav'
         const audioBlob = new Blob(audioChunksRef.current, { type: currentType })
         console.log('[useVoice] audioBlob size=', audioBlob.size)
+        const t2 = Date.now()
         const transcript = await transcribeAudio(audioBlob)
-        console.log('[useVoice] Transcription reçue:', transcript)
+        const t3 = Date.now()
+        console.log('[useVoice] Transcription reçue:', transcript, 'STT time=', (t3 - t2), 'ms, total time=', (t3 - t1), 'ms')
         
         if (transcript) {
           try {
