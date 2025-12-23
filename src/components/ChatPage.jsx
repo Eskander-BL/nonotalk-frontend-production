@@ -143,7 +143,7 @@ export default function ChatPage() {
           return
         }
 
-        await sendMessage(clean, null, targetConvId)
+        await sendMessageStream(clean, null, targetConvId)
       } catch (err) {
         console.error('[ChatPage] Erreur handler event voice:transcription:', err)
       }
@@ -333,19 +333,14 @@ export default function ChatPage() {
       }))
 
       const data = await response.json()
-      console.log('[ChatPage] Response data:', JSON.stringify(data, null, 2))
-      console.log('[ChatPage] AI message content:', data.ai_message?.content)
 
       if (response.ok) {
         if (data.crisis_detected) {
           setCrisisAlert(data.emergency_message)
         } else {
           // Ajouter les messages à la conversation + MAJ cache local
-          console.log('[ChatPage] Adding messages to state:', { user: data.user_message, ai: data.ai_message })
           setMessages(prev => {
             const next = [...prev, data.user_message, data.ai_message]
-            console.log('[ChatPage] Messages after update:', next.length, 'total messages')
-            console.log('[ChatPage] Last AI message:', next[next.length - 1]?.content)
             try {
               localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
             } catch (e) {
@@ -358,13 +353,6 @@ export default function ChatPage() {
           if (user) {
             updateUser({ ...user, quota_remaining: data.quota_remaining })
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
-          }
-
-          // Appel audio: si audio_path existe => appeler playAudio() immediatement
-          if (data.ai_message?.audio_path) {
-            setTimeout(() => {
-              playAudio(data.ai_message.audio_path)
-            }, 300)
           }
 
           return data
@@ -385,7 +373,149 @@ export default function ChatPage() {
     return null
   }
 
+  // Streaming: déclencher TTS sur la première phrase (0.25–0.5s après fin micro), puis lire le reste à la fin
+  const sendMessageStream = async (messageContent, emotion = null, conversationIdOverride = null) => {
+    const convId = conversationIdOverride ?? currentConversation?.id
+    if (!messageContent?.trim() || !convId) return null
 
+    setIsLoading(true)
+    try {
+      const streamUrl = `${API_URL}/chat/conversations/${convId}/send-stream`
+
+      const res = await fetch(streamUrl, getAuthFetchOptions({
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache'
+        },
+        body: JSON.stringify({ message: messageContent, emotion })
+      }))
+
+      if (!res.ok || !res.body) {
+        console.warn('[ChatPage] Streaming non dispo, fallback sendMessage')
+        return await sendMessage(messageContent, emotion, convId)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+      let fullText = ''
+      let firstSentenceSpoken = false
+      let firstSentenceLength = 0
+      let fallbackTimer = null
+      let lastSpokenIndex = 0
+      // Démarrage dès arrivée du premier token (pas d'attente forcée)
+      const makeSnippet = (txt) => {
+        const t = (txt || '').trim()
+        if (t.length <= 0) return ''
+        // Prendre 80 premiers chars max, couper proprement sur espace/ponctuation si possible
+        const cutMax = 80
+        const slice = t.slice(0, cutMax)
+        const punctIdx = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('!'), slice.lastIndexOf('?'), slice.lastIndexOf('…'), slice.lastIndexOf(','))
+        const spaceIdx = slice.lastIndexOf(' ')
+        const cutIdx = punctIdx >= 10 ? punctIdx + 1 : (spaceIdx >= 10 ? spaceIdx : slice.length)
+        return slice.slice(0, cutIdx).trim()
+      }
+      const trySpeakImmediateFirst = () => {
+        if (firstSentenceSpoken) return
+        if (fullText.trim().length < 8) return
+        const snippet = makeSnippet(fullText)
+        if (snippet && snippet.length > 0) {
+          speakText(snippet)
+          firstSentenceSpoken = true
+          firstSentenceLength = snippet.length
+          lastSpokenIndex = snippet.length
+        }
+      }
+
+      const sentenceRegex = /[^.!?…]+[.!?…](?:\s|$)/g
+
+      const trySpeakNewSentences = () => {
+        const text = fullText
+        sentenceRegex.lastIndex = lastSpokenIndex
+        let match
+        while ((match = sentenceRegex.exec(text))) {
+          const raw = match[0]
+          const sentence = raw.trim()
+          const endIdx = match.index + raw.length
+          if (endIdx <= lastSpokenIndex) continue
+
+          if (!firstSentenceSpoken) {
+            firstSentenceLength = endIdx
+            speakText(sentence)
+            firstSentenceSpoken = true
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer)
+              fallbackTimer = null
+            }
+          } else {
+            speakText(sentence)
+          }
+          lastSpokenIndex = endIdx
+        }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        sseBuffer += chunk
+
+        const events = sseBuffer.split('\n\n')
+        sseBuffer = events.pop() || ''
+        for (const evt of events) {
+          const line = evt.trim()
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload) continue
+          let data
+          try {
+            data = JSON.parse(payload)
+          } catch {
+            continue
+          }
+
+          if (data.type === 'delta' && data.content) {
+            fullText += data.content
+            trySpeakImmediateFirst()
+            trySpeakNewSentences()
+          } else if (data.type === 'done') {
+            if (fallbackTimer) {
+              clearTimeout(fallbackTimer)
+              fallbackTimer = null
+            }
+            // MAJ UI + quota
+            try {
+              setMessages(prev => {
+                const next = [...prev, data.user_message, data.ai_message]
+                try {
+                  localStorage.setItem(`recentMessages:${convId}`, JSON.stringify(next.slice(-10)))
+                } catch {}
+                return next
+              })
+              if (user) updateUser({ ...user, quota_remaining: data.quota_remaining })
+            } catch (e) {
+              console.warn('[ChatPage] MAJ UI post-stream échouée', e)
+            }
+
+            // Lire le reste du texte non encore joué
+            const remaining = fullText.slice(lastSpokenIndex).trim()
+            if (remaining) {
+              speakText(remaining)
+              lastSpokenIndex = fullText.length
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ChatPage] Erreur streaming:', e)
+      return await sendMessage(messageContent, emotion, conversationIdOverride)
+    } finally {
+      setIsLoading(false)
+    }
+    return null
+  }
 
   const speakText = async (text) => {
     if (useElevenLabs) {
@@ -431,7 +561,7 @@ export default function ChatPage() {
               console.error('[ChatPage] Impossible de déterminer une conversation id')
               return
             }
-            await sendMessage(cleanTranscript, null, targetConvId)
+            await sendMessageStream(cleanTranscript, null, targetConvId)
           } else {
             console.warn('[ChatPage] Transcript vide/falsy, envoi annulé')
           }
