@@ -371,7 +371,22 @@ export function useVoice() {
         
         // Créer un nouvel élément audio
         const audio = new Audio()
-        audio.src = audioUrl
+        audio.crossOrigin = 'anonymous'
+
+        // Forcer l'URL complète du backend si c'est une URL relative
+        let fullAudioUrl = audioUrl
+        if (audioUrl.startsWith('/')) {
+          if (audioUrl.startsWith('/api/')) {
+            const audioPath = audioUrl.substring(4)
+            fullAudioUrl = `${API_URL}${audioPath}`
+          } else {
+            fullAudioUrl = `${API_URL}${audioUrl}`
+          }
+        }
+
+        console.log('[useVoice] Loading audio from:', fullAudioUrl)
+        console.log('[useVoice] API_URL:', API_URL, 'audioUrl:', audioUrl)
+        audio.src = fullAudioUrl
         audio.volume = 1.0
         
         audio.onplay = () => {
