@@ -363,73 +363,31 @@ export function useVoice() {
       )
       
       if (isAudioUrl) {
-        console.log('[useVoice] playAudio: MP3 file detected:', audioUrl)
         
         // Déverrouiller l'audio s'il ne l'est pas déjà
         if (!audioUnlocked) {
           unlockAudio()
         }
         
-        // Créer un nouvel élément audio et le stocker dans une référence persistante
+        // Créer un nouvel élément audio
         const audio = new Audio()
-        audio.crossOrigin = 'anonymous'
-        
-        // Forcer l'URL complète du backend si c'est une URL relative
-        let fullAudioUrl = audioUrl
-        if (audioUrl.startsWith('/')) {
-          // API_URL contient déjà '/api', donc si audioUrl commence par '/api/', on doit l'enlever
-          if (audioUrl.startsWith('/api/')) {
-            // Enlever le '/api' de audioUrl pour éviter /api/api
-            const audioPath = audioUrl.substring(4)  // Enlever '/api'
-            fullAudioUrl = `${API_URL}${audioPath}`
-          } else {
-            fullAudioUrl = `${API_URL}${audioUrl}`
-          }
-        }
-        
-        console.log('[useVoice] Loading audio from:', fullAudioUrl)
-        console.log('[useVoice] API_URL:', API_URL, 'audioUrl:', audioUrl)
-        audio.src = fullAudioUrl
+        audio.src = audioUrl
         audio.volume = 1.0
         
-        // Stocker la référence pour éviter le garbage collection
-        audioElementRef.current = audio
-        
         audio.onplay = () => {
-          console.log('[useVoice] Audio playing:', audioUrl)
           setIsPlaying(true)
         }
         
         const handleDone = () => {
-          console.log('[useVoice] Audio ended/error')
           setIsPlaying(false)
-          audioElementRef.current = null
         }
         
         audio.onended = handleDone
-        audio.onerror = (err) => {
-          console.error('[useVoice] Audio error:', err)
-          handleDone()
-        }
+        audio.onerror = handleDone
         
-        // Ajouter un timeout de sécurité (au cas où l'audio ne se termine pas)
-        const timeoutId = setTimeout(() => {
-          console.warn('[useVoice] Audio timeout - stopping playback')
-          audio.pause()
-          handleDone()
-        }, 30000) // 30 secondes max
-        
-        audio.onended = () => {
-          clearTimeout(timeoutId)
-          handleDone()
-        }
-        
-        try {
-          await audio.play()
-          console.log('[useVoice] Audio.play() resolved')
-        } catch (playErr) {
-          console.error('[useVoice] Audio.play() failed:', playErr)
-          handleDone()
+        const playPromise = audio.play()
+        if (playPromise !== undefined) {
+          playPromise.catch(() => handleDone())
         }
         return
       }
