@@ -355,6 +355,12 @@ export default function ChatPage() {
             console.log('[ChatPage] Quota restant:', data.quota_remaining)
           }
 
+          // Jouer l'audio de la réponse IA si disponible
+          if (data.ai_message?.audio_path) {
+            console.log('[ChatPage] Appel playAudio pour audio_path:', data.ai_message.audio_path)
+            playAudio(data.ai_message.audio_path)
+          }
+
           return data
         }
       } else if (response.status === 403) {
