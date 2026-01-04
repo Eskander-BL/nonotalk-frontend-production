@@ -29,7 +29,7 @@ import { API_URL, getAuthFetchOptions } from '../lib/api'
 export default function ChatPage() {
   const { user, logout, updateUser } = useAuth()
   const isMobile = useIsMobile()
-  const { isRecording, isPlaying, startRecording, stopRecording, playAudio, stopAudio } = useVoice()
+  const { isRecording, isPlaying, audioLevel, startRecording, stopRecording, playAudio, stopAudio } = useVoice()
   const navigate = useNavigate()
   const [conversations, setConversations] = useState([])
   const [currentConversation, setCurrentConversation] = useState(null)
@@ -724,11 +724,7 @@ export default function ChatPage() {
               </div>
               <div className="mt-auto border-t p-3 text-xs flex flex-col items-center text-center">
                 <a
-                  href="mailto:help.nonotalk@outlook.fr?subject=Demande%20d%27aide%20-%20NonoTalk"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.href = 'mailto:help.nonotalk@gmail.com?subject=Demande%20d%27aide%20-%20NonoTalk';
-                  }}
+                  href="mailto:contact@nonotalk.fr?subject=Demande%20d%27aide%20-%20NonoTalk"
                   className="inline-block bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent font-semibold hover:opacity-80"
                 >
                   Help ❓
@@ -807,6 +803,15 @@ export default function ChatPage() {
                 aria-hidden="true"
                 className={`absolute inset-0 w-full h-full rounded-full object-cover pointer-events-none nono-video ${isPlaying ? 'opacity-100' : 'opacity-0'}`}
               />
+              {/* Lip-sync animation */}
+              {isPlaying && (
+                <div className="mouth-container">
+                  <div 
+                    className={`mouth ${isPlaying ? 'speaking' : ''}`}
+                    data-volume={audioLevel > 0.6 ? 'high' : audioLevel > 0.3 ? 'medium' : 'low'}
+                  />
+                </div>
+              )}
             </div>
           </div>
           <p className="text-center text-gray-600 text-sm md:text-lg font-medium px-4 mt-1 md:mt-3">
