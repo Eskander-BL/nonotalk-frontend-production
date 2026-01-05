@@ -115,7 +115,7 @@ export function useVoice() {
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
     let lastSoundTime = Date.now()
     const SILENCE_THRESHOLD = 30
-    const SILENCE_DURATION = 1200 // 1.2s de silence
+    const SILENCE_DURATION = 2000 // 2s de silence - attendre 2 secondes complètes avant d'arrêter
     
     const checkSilence = () => {
       if (!isCheckingSilenceRef.current || !mediaRecorder || mediaRecorder.state !== 'recording') {
@@ -339,23 +339,21 @@ export function useVoice() {
    */
   const playAudio = useCallback(async (audioUrl) => {
     try {
-      // Vérifier que c'est une URL audio
-      const isAudioUrl = audioUrl && (
-        typeof audioUrl === 'string' && (
-          audioUrl.includes('/api/audio') ||
-          audioUrl.endsWith('.mp3') ||
-          audioUrl.endsWith('.wav') ||
-          audioUrl.endsWith('.m4a') ||
-          (audioUrl.startsWith('http') && (
-            audioUrl.includes('audio') || 
-            audioUrl.includes('.mp3') || 
-            audioUrl.includes('.wav')
-          ))
-        )
+      // Verifier que c'est une URL audio (robuste)
+      const isAudioUrl = audioUrl && typeof audioUrl === 'string' && (
+        audioUrl.includes('/api/audio') ||
+        audioUrl.includes('/audio/') ||
+        audioUrl.endsWith('.mp3') ||
+        audioUrl.endsWith('.wav') ||
+        audioUrl.endsWith('.m4a') ||
+        audioUrl.endsWith('.ogg') ||
+        audioUrl.startsWith('/') || // URL relative
+        audioUrl.startsWith('http') // URL absolue
       )
       
       if (!isAudioUrl) {
         console.warn('[useVoice] URL audio invalide:', audioUrl)
+        console.log('[useVoice] Type recu:', typeof audioUrl, 'Valeur:', audioUrl)
         return
       }
       
