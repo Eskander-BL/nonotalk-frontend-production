@@ -115,43 +115,9 @@ export default function ChatPage() {
 
   // Pas de scroll automatique sur mobile
 
-  // Filet de sécurité: écouter l'évènement global dispatché par useVoice()
-  useEffect(() => {
-    const onTranscription = async (e) => {
-      try {
-        const t = e?.detail?.transcript
-        console.log('[ChatPage] Event voice:transcription reçu:', t)
-        const clean = typeof t === 'string' ? t.trim() : ''
-        if (!clean) {
-          console.warn('[ChatPage] Transcript (event) vide/falsy, envoi annulé')
-          return
-        }
-        if (clean === lastTranscriptRef.current) {
-          console.warn('[ChatPage] Transcript dupliqué (event), envoi annulé')
-          return
-        }
-        lastTranscriptRef.current = clean
-
-        // S'assurer d'avoir un convId
-        let targetConvId = currentConversation?.id
-        if (!targetConvId) {
-          const conv = await createMainConversation()
-          targetConvId = conv?.id
-        }
-        if (!targetConvId) {
-          console.error('[ChatPage] Impossible de déterminer une conversation id (event)')
-          return
-        }
-
-        await sendMessageStream(clean, null, targetConvId)
-      } catch (err) {
-        console.error('[ChatPage] Erreur handler event voice:transcription:', err)
-      }
-    }
-
-    window.addEventListener('voice:transcription', onTranscription)
-    return () => window.removeEventListener('voice:transcription', onTranscription)
-  }, [currentConversation])
+  // Désactivé: utiliser uniquement le callback du hook startRecording
+  // L'event listener causait des doublons et des retards
+  // Le callback est plus direct et plus rapide
 
   // Auto scroll en bas de l'historique quand de nouveaux messages arrivent
   useEffect(() => {
