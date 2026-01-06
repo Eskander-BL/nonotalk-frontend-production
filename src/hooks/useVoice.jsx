@@ -363,32 +363,27 @@ export function useVoice() {
       )
       
       if (isAudioUrl) {
-        
-        // Déverrouiller l'audio s'il ne l'est pas déjà
-        if (!audioUnlocked) {
-          unlockAudio()
+        if (!audioUnlocked) unlockAudio()
+
+        if (!audioElementRef.current) {
+          audioElementRef.current = new Audio()
+          audioElementRef.current.playsInline = true
+          audioElementRef.current.preload = 'auto'
         }
-        
-        // Créer un nouvel élément audio
-        const audio = new Audio()
+
+        const audio = audioElementRef.current
+        audio.pause()
+        audio.currentTime = 0
         audio.src = audioUrl
         audio.volume = 1.0
-        
-        audio.onplay = () => {
-          setIsPlaying(true)
-        }
-        
-        const handleDone = () => {
-          setIsPlaying(false)
-        }
-        
-        audio.onended = handleDone
-        audio.onerror = handleDone
-        
-        const playPromise = audio.play()
-        if (playPromise !== undefined) {
-          playPromise.catch(() => handleDone())
-        }
+
+        audio.onplay = () => { console.log('[useVoice] audio play'); setIsPlaying(true) }
+        audio.onended = () => { console.log('[useVoice] audio ended'); setIsPlaying(false) }
+        audio.onerror = () => { console.warn('[useVoice] audio error'); setIsPlaying(false) }
+
+        try { await audio.play() }
+        catch (e) { console.warn('[useVoice] play() failed', e); setIsPlaying(false) }
+
         return
       }
       

@@ -588,14 +588,11 @@ export default function ChatPage() {
               </div>
               <div className="mt-auto border-t p-3 text-xs flex flex-col items-center text-center">
                 <a
-                  href="mailto:help.nonotalk@outlook.fr?subject=Demande%20d%27aide%20-%20NonoTalk"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.href = 'mailto:help.nonotalk@gmail.com?subject=Demande%20d%27aide%20-%20NonoTalk';
-                  }}
+                  href="mailto:contact@nonotalk.fr?subject=Support%20NonoTalk"
                   className="inline-block bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent font-semibold hover:opacity-80"
+                  title="Contacter le support"
                 >
-                  Help ❓
+                  Contact le support
                 </a>
                 <p className="text-gray-500 mt-2 leading-snug">NonoTalk est nourri de sources fiables mais ne remplace pas un professionnel de santé</p>
               </div>
