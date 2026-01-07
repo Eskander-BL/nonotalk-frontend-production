@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import LoginPage from './components/LoginPage'
+import SignupPage from './components/SignupPage'
 import ChatPage from './components/ChatPage'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { NotificationManager, scheduleInactivityReminder, scheduleDailyRitual } from './components/NotificationManager'
@@ -22,6 +23,10 @@ function AppRoutes() {
       <Route 
         path="/login" 
         element={user ? <Navigate to="/chat" replace /> : <LoginPage />} 
+      />
+      <Route 
+        path="/signup" 
+        element={user ? <Navigate to="/chat" replace /> : <SignupPage />} 
       />
       <Route 
         path="/chat" 
