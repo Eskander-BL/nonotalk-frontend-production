@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,9 +12,11 @@ import logoImage from '../assets/logo.png'
 export default function SignupPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [registerErrors, setRegisterErrors] = useState({ username: '', email: '', pin: '', general: '' })
   const [success, setSuccess] = useState('')
+  const [invitationToken, setInvitationToken] = useState('')
 
   // Refs pour focaliser le premier champ en erreur
   const regUsernameRef = useRef(null)
@@ -25,8 +28,18 @@ export default function SignupPage() {
     username: '',
     email: '',
     pin: '',
-    parrain_email: ''
+    parrain_email: '',
+    token: ''
   })
+
+  // Récupérer le token de l'URL au montage du composant
+  useEffect(() => {
+    const token = searchParams.get('token')
+    if (token) {
+      setInvitationToken(token)
+      setRegisterData(prev => ({ ...prev, token }))
+    }
+  }, [searchParams])
 
   const handleRegister = async (e) => {
     e.preventDefault()
@@ -56,11 +69,13 @@ export default function SignupPage() {
       return
     }
 
+    // ✅ Envoyer le token d'invitation au backend
     const result = await register(
       registerData.username,
       registerData.email.trim(),
       registerData.pin,
-      registerData.parrain_email
+      registerData.parrain_email,
+      invitationToken
     )
 
     if (result.success) {

@@ -66,14 +66,16 @@ export function AuthProvider({ children }) {
         setUser(data.user)
         return { success: true, user: data.user }
       } else {
-        return { success: false, error: data.error }
+        // ✅ Sanitize error message - ne jamais exposer l'erreur brute
+        const errorMsg = data.error || 'Une erreur est survenue, merci de réessayer plus tard'
+        return { success: false, error: errorMsg }
       }
     } catch (error) {
-      return { success: false, error: 'Erreur de connexion' }
+      return { success: false, error: 'Une erreur est survenue, merci de réessayer plus tard' }
     }
   }
 
-  const register = async (username, email, pin, parrain_email) => {
+  const register = async (username, email, pin, parrain_email, invitationToken) => {
     try {
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
@@ -81,7 +83,7 @@ export function AuthProvider({ children }) {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ username, email, pin, parrain_email }),
+        body: JSON.stringify({ username, email, pin, parrain_email, token: invitationToken }),
       })
 
       const data = await response.json()
@@ -95,10 +97,12 @@ export function AuthProvider({ children }) {
         setUser(data.user)
         return { success: true, user: data.user, bonus_quota: data.bonus_quota }
       } else {
-        return { success: false, error: data.error }
+        // ✅ Sanitize error message - ne jamais exposer l'erreur brute
+        const errorMsg = data.error || 'Une erreur est survenue, merci de réessayer plus tard'
+        return { success: false, error: errorMsg }
       }
     } catch (error) {
-      return { success: false, error: 'Erreur d\'inscription' }
+      return { success: false, error: 'Une erreur est survenue, merci de réessayer plus tard' }
     }
   }
 
