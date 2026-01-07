@@ -69,11 +69,13 @@ export default function SignupPage() {
       return
     }
 
+    // ✅ Envoyer le token d'invitation au backend
     const result = await register(
       registerData.username,
       registerData.email.trim(),
       registerData.pin,
-      registerData.parrain_email
+      registerData.parrain_email,
+      invitationToken
     )
 
     if (result.success) {
