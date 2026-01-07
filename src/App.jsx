@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import LoginPage from './components/LoginPage'
 import SignupPage from './components/SignupPage'
@@ -9,12 +9,6 @@ import { NotificationManager, scheduleInactivityReminder, scheduleDailyRitual } 
 
 function AppRoutes() {
   const { user, loading } = useAuth()
-  const [searchParams] = useSearchParams()
-  const invitationToken = searchParams.get('token')
-  
-  // ✅ Si token d'invitation présent, forcer un état "guest" (ignorer la session existante)
-  const isGuest = !!invitationToken
-  const effectiveUser = isGuest ? null : user
 
   if (loading) {
     return (
@@ -28,19 +22,19 @@ function AppRoutes() {
     <Routes>
       <Route 
         path="/login" 
-        element={effectiveUser ? <Navigate to="/chat" replace /> : <LoginPage />} 
+        element={user ? <Navigate to="/chat" replace /> : <LoginPage />} 
       />
       <Route 
         path="/signup" 
-        element={effectiveUser ? <Navigate to="/chat" replace /> : <SignupPage />} 
+        element={user ? <Navigate to="/chat" replace /> : <SignupPage />} 
       />
       <Route 
         path="/chat" 
-        element={effectiveUser ? <ChatPage /> : <Navigate to="/login" replace />} 
+        element={user ? <ChatPage /> : <Navigate to="/login" replace />} 
       />
       <Route 
         path="/" 
-        element={<Navigate to={effectiveUser ? "/chat" : "/login"} replace />} 
+        element={<Navigate to={user ? "/chat" : "/login"} replace />} 
       />
     </Routes>
   )
