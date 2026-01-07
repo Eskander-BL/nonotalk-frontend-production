@@ -680,7 +680,6 @@ export default function ChatPage() {
         <div className="flex items-center justify-center gap-4">
           <Button
             onClick={handleVoiceRecording}
-            disabled={isLoading}
             className={`w-16 h-16 rounded-full opacity-100 cursor-pointer ${
               isRecording
                 ? 'bg-red-500 hover:bg-red-600 recording-ring'

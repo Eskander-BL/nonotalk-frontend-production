@@ -198,11 +198,21 @@ export function useVoice() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
       let lastSoundTime = Date.now()
       const SILENCE_THRESHOLD = 30
-      const SILENCE_DURATION = 2000 // ~2.0s de silence (laisser le temps de parler)
+      const SILENCE_DURATION = 2000 // 2 secondes complètes de silence réel
       let isCheckingActive = true
+      const gracePeriod = 700 // 700ms de grâce après démarrage, ignorer silence
+
+      let recordingStartTime = Date.now()
 
       const checkSilence = () => {
         if (!isCheckingActive || !mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
+          return
+        }
+
+        const now = Date.now()
+        if (now - recordingStartTime < gracePeriod) {
+          // Pendant la période de grâce, ignorer la détection de silence
+          requestAnimationFrame(checkSilence)
           return
         }
 
@@ -210,10 +220,10 @@ export function useVoice() {
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length
 
         if (average > SILENCE_THRESHOLD) {
-          lastSoundTime = Date.now()
-        } else if (Date.now() - lastSoundTime > SILENCE_DURATION) {
-          // Silence détecté pendant ~1.0s, arrêt enregistrement
-          console.log('[useVoice] Silence détecté (>1.0s), arrêt enregistrement')
+          lastSoundTime = now
+        } else if (now - lastSoundTime > SILENCE_DURATION) {
+          // Silence détecté pendant 2 secondes complètes, arrêt enregistrement
+          console.log('[useVoice] Silence détecté (>2s), arrêt enregistrement')
           isCheckingActive = false
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop()
@@ -369,20 +379,45 @@ export function useVoice() {
           audioElementRef.current = new Audio()
           audioElementRef.current.playsInline = true
           audioElementRef.current.preload = 'auto'
+
+          // Ajouter gestion oncanplaythrough pour garantir que la source est prête avant play()
+          audioElementRef.current.oncanplaythrough = () => {
+            if (audioElementRef.current && !audioElementRef.current.playing) {
+              audioElementRef.current.play().catch((e) => {
+                console.warn('[useVoice] play() failed after oncanplaythrough', e)
+                setIsPlaying(false)
+              })
+            }
+          }
         }
 
         const audio = audioElementRef.current
-        audio.pause()
-        audio.currentTime = 0
-        audio.src = audioUrl
-        audio.volume = 1.0
+
+        // Ne pas modifier src si audio est en train de jouer
+        if (audio && !audio.paused && !audio.ended) {
+          console.log('[useVoice] audio is playing, ne pas modifier src')
+        } else {
+          audio.pause()
+          audio.currentTime = 0
+          audio.src = audioUrl
+          audio.load()
+        }
 
         audio.onplay = () => { console.log('[useVoice] audio play'); setIsPlaying(true) }
         audio.onended = () => { console.log('[useVoice] audio ended'); setIsPlaying(false) }
         audio.onerror = () => { console.warn('[useVoice] audio error'); setIsPlaying(false) }
 
-        try { await audio.play() }
-        catch (e) { console.warn('[useVoice] play() failed', e); setIsPlaying(false) }
+        try {
+          if (audio.readyState >= 4) {
+            await audio.play()
+          } else {
+            // Attendre oncanplaythrough avant play (déjà géré par l'event)
+            console.log('[useVoice] attente oncanplaythrough avant play')
+          }
+        } catch (e) {
+          console.warn('[useVoice] play() failed', e)
+          setIsPlaying(false)
+        }
 
         return
       }
