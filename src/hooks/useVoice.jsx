@@ -216,14 +216,22 @@ export function useVoice() {
           return
         }
 
-        analyser.getByteFrequencyData(dataArray)
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length
+        // Utiliser getByteTimeDomainData pour RMS
+        const timeData = new Uint8Array(analyser.fftSize)
+        analyser.getByteTimeDomainData(timeData)
 
-        if (average > SILENCE_THRESHOLD) {
+        let sumSquares = 0
+        for (let i = 0; i < timeData.length; i++) {
+          const val = (timeData[i] - 128) / 128
+          sumSquares += val * val
+        }
+        const rms = Math.sqrt(sumSquares / timeData.length)
+
+        if (rms > 0.015) {
           lastSoundTime = now
         } else if (now - lastSoundTime > SILENCE_DURATION) {
           // Silence détecté pendant 2 secondes complètes, arrêt enregistrement
-          console.log('[useVoice] Silence détecté (>2s), arrêt enregistrement')
+          console.log('[useVoice] Silence détecté (>2s), arrêt enregistrement (RMS)')
           isCheckingActive = false
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop()

@@ -365,6 +365,10 @@ export default function ChatPage() {
             setTimeout(() => {
               playAudio(data.ai_message.audio_path)
             }, 300)
+          } else if (data.ai_message?.content) {
+            setTimeout(() => {
+              playAudio(data.ai_message.content)
+            }, 300)
           }
 
           return data
