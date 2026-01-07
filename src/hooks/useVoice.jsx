@@ -276,7 +276,7 @@ export function useVoice() {
         if (transcript && onTranscriptionComplete) {
           console.log('[useVoice] Appel du callback onTranscriptionComplete')
           // Décaler l'appel pour sortir du cycle onstop (évite d'éventuelles contraintes de timing)
-          setTimeout(() => onTranscriptionComplete(transcript), 0)
+          setTimeout(() => onTranscriptionComplete(transcript), 1000) // délai réduit à 1 seconde
         }
         
         // Nettoyer les ressources
