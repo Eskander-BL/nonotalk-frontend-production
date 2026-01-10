@@ -566,30 +566,63 @@ export default function ChatPage() {
                   Historique de conversation
                 </h4>
               </div>
-              <div ref={historyRef} className="p-4 space-y-2 flex-1 overflow-y-auto">
-                {messages.slice(-10).map((message, index) => (
-                  <Card 
-                    key={`${message.id}-${index}`}
-                    className="p-3 transition-colors hover:bg-gray-50"
-                  >
-                    <div className={`text-sm ${message.is_user ? 'text-purple-600 font-medium' : 'text-blue-700'}`}>
-                     {message.is_user ? `🙋‍♂️ ${user?.username || 'Vous'}` : '👱‍♀️ Nono'}
-                    </div>
+          <div ref={historyRef} className="p-4 space-y-2 flex-1 overflow-y-auto">
+            {messages.slice(-10).map((message, index) => {
+              const isAi = !message.is_user
+              const [audioPlaying, setAudioPlaying] = useState(false)
+              const [prevAudioPath, setPrevAudioPath] = useState(null)
+              const [showThinking, setShowThinking] = useState(false)
 
-                    <div className="text-xs text-gray-600 mt-1 line-clamp-2">
-                      {message.content}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {formatTime(message.timestamp)}
-                    </div>
-                  </Card>
-                ))}
-                {messages.length === 0 && (
-                  <div className="text-center text-gray-500 text-sm py-8">
-                    Aucun message pour le moment
+              // useEffect to detect audio_path change from null to non-null
+              useEffect(() => {
+                if (isAi) {
+                  if (prevAudioPath !== message.audio_path) {
+                    if (message.audio_path) {
+                      // audio_path changed from null to non-null: play audio once
+                      if (!audioPlaying) {
+                        setShowThinking(false)
+                        setAudioPlaying(true)
+                        playAudio(message.audio_path).then(() => {
+                          setAudioPlaying(false)
+                        })
+                      }
+                    } else {
+                      // audio_path is null: show "Nono réfléchit..."
+                      setShowThinking(true)
+                    }
+                    setPrevAudioPath(message.audio_path)
+                  }
+                }
+              }, [message.audio_path, prevAudioPath, isAi, audioPlaying])
+
+              return (
+                <Card 
+                  key={`${message.id}-${index}`}
+                  className="p-3 transition-colors hover:bg-gray-50"
+                >
+                  <div className={`text-sm ${message.is_user ? 'text-purple-600 font-medium' : 'text-blue-700'}`}>
+                   {message.is_user ? `🙋‍♂️ ${user?.username || 'Vous'}` : '👱‍♀️ Nono'}
                   </div>
-                )}
+
+                  <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                    {showThinking ? (
+                      <em>Nono réfléchit...</em>
+                    ) : (
+                      message.content
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {formatTime(message.timestamp)}
+                  </div>
+                </Card>
+              )
+            })}
+            {messages.length === 0 && (
+              <div className="text-center text-gray-500 text-sm py-8">
+                Aucun message pour le moment
               </div>
+            )}
+          </div>
               <div className="mt-auto border-t p-3 text-xs flex flex-col items-center text-center">
                 <a
                   href="mailto:contact@nonotalk.fr?subject=Support%20NonoTalk"
